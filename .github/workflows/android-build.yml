@@ -23,13 +23,13 @@ jobs:
       - name: Install Android SDK and accept licenses
         run: |
           yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager 'platforms;android-37' 'build-tools;36.0.0' 'platform-tools'
+          sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'platform-tools'
       - name: Restore and verify official Wrapper JAR
         run: bash scripts/restore_gradle_wrapper.sh
       - name: Verify Wrapper distribution
         run: ./gradlew --version
       - name: Install backend dependencies
-        run: npm install --no-audit --no-fund --prefix backend
+        run: npm ci --no-audit --no-fund --prefix backend
       - name: Verify project
         run: bash scripts/verify_project.sh
       - name: Android unit tests, lint and offline preview APK
@@ -91,7 +91,7 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
       - uses: android-actions/setup-android@v4.0.4
-      - run: sdkmanager 'platforms;android-37' 'build-tools;36.0.0' 'platform-tools' 'system-images;android-35;google_apis;x86_64'
+      - run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'platform-tools' 'system-images;android-35;google_apis;x86_64'
       - run: bash scripts/restore_gradle_wrapper.sh
       - name: Run instrumented tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
@@ -136,7 +136,7 @@ jobs:
         env:
           ORG_GRADLE_PROJECT_momentoApiBaseUrl: ${{ vars.MOMENTO_API_URL }}
         run: |
-          sdkmanager 'platforms;android-37' 'build-tools;36.0.0' 'platform-tools'
+          sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'platform-tools'
           bash scripts/restore_gradle_wrapper.sh
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/momento-release.jks"
           export MOMENTO_KEYSTORE="$RUNNER_TEMP/momento-release.jks"

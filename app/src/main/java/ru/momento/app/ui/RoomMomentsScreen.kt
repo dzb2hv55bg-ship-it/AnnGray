@@ -5,7 +5,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
@@ -44,8 +43,12 @@ fun RoomMomentsScreen(
             OutlinedButton(onClick = onPlay, enabled = links.isNotEmpty()) { Text("Смотреть") }
         }
         if (room.visibility == "PUBLIC") {
-            Button(onClick = onPublish, enabled = links.isNotEmpty() && !room.publicationRequested) {
-                Text(if (room.status == "PUBLISHED") "Опубликовать новые моменты" else if (room.publicationRequested) "Ожидает публикации" else "Опубликовать открытый влог")
+            Button(onClick = onPublish, enabled = links.isNotEmpty() && !room.publicationRequested && room.status != "COMPLETED") {
+                Text(when {
+                    room.publicationRequested -> "Ожидает публикации"
+                    room.status == "PUBLISHED" -> "Опубликовать новые моменты"
+                    else -> "Опубликовать открытый влог"
+                })
             }
         }
         Text("Напоминания настраиваются в профиле: пять случайных сигналов на аккаунт, а не на комнату.",
@@ -60,7 +63,7 @@ fun RoomMomentsScreen(
                         Text(link.series, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             TextButton(onClick = { onSeries(link.momentId, nextSeries(link.series)) }) { Text("Серия +") }
-                            TextButton(onClick = { onRemove(link.momentId) }) { Text("Убрать") }
+                            TextButton(onClick = { onRemove(link.momentId) }, enabled = !room.publicationRequested) { Text("Убрать") }
                         }
                     }
                 }

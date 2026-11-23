@@ -173,9 +173,10 @@ assert "scripts/test_upload_queue_migration.py" in quality_workflow
 assert "assembleDebug" in android_workflow
 assert "upload-artifact" in android_workflow
 assert "scripts/restore_gradle_wrapper.sh" in android_workflow
-assert "scripts/run_tests.sh" in android_workflow
+assert ":app:testDebugUnitTest" in android_workflow
+assert ":app:lintDebug" in android_workflow
 assert "contents: read" in android_workflow
-assert "MOMENTO-debug-apk" in android_workflow
+assert "MOMENTO-offline-preview-apk" in android_workflow
 
 # The rooms-first UI must use actual account-scoped local data, not invented public listings.
 rooms_ui = (ROOT / "app/src/main/java/ru/momento/app/ui/RoomsExperience.kt").read_text()
@@ -185,6 +186,6 @@ assert "Мои комнаты" in rooms_ui and "Публичный катало�
 assert "onSave(name.trim(), description.trim(), visibility, topic)" in rooms_ui
 
 # The archive must reflect asynchronous WorkManager state transitions.
-assert 'LaunchedEffect(database, selectedTab)' in ui
+assert 'LaunchedEffect(database, spacesDatabase, selectedTab)' in ui
 assert 'database.getMoments()' in ui
 assert 'latest != savedMoments.toList()' in ui

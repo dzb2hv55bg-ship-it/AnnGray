@@ -94,6 +94,12 @@ class LocalSpaceDatabase(context: Context, accountId: String) : SQLiteOpenHelper
     }
 
     @Synchronized
+    fun clearPublicationRequest(roomId: String) {
+        writableDatabase.update("spaces", ContentValues().apply { put("publication_requested", 0) },
+            "id = ?", arrayOf(roomId))
+    }
+
+    @Synchronized
     fun roomById(id: String): LocalSpace? = getSpaces().firstOrNull { it.id == id }
 
     @Synchronized

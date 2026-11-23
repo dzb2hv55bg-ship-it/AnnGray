@@ -9,6 +9,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkerParameters
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import ru.momento.app.network.MomentoApiClient
@@ -22,17 +23,10 @@ class MomentUploadWorker(context: Context, params: WorkerParameters) : Coroutine
         val expectedOwner = inputData.getString(OWNER_KEY) ?: return@withContext Result.failure()
         val vault = MomentoSessionVault(applicationContext)
         if (vault.readVerifiedAccountId() != expectedOwner) return@withContext Result.failure()
-        // Refresh only for the same server-verified account. A failed refresh
-        // never authorizes an upload with stale credentials.
-        val session = try {
-            MomentoSessionRefresh.refreshForOwner(vault, expectedOwner)
-        } catch (e: Exception) {
-            val permanent = e is MomentoApiException && e.statusCode in 400..499 && e.statusCode != 408 && e.statusCode != 429
-            return@withContext if (permanent) Result.failure() else Result.retry()
-        } ?: return@withContext Result.failure()
         val database = LocalMomentDatabase(applicationContext, expectedOwner)
         val rooms = LocalSpaceDatabase(applicationContext, expectedOwner)
         try {
+            var retryNeeded = false
             database.recoverInterruptedUploads()
             val client = MomentoApiClient()
             for (moment in database.queuedMoments()) {
@@ -41,6 +35,7 @@ class MomentUploadWorker(context: Context, params: WorkerParameters) : Coroutine
                 val activeSession = try {
                     MomentoSessionRefresh.refreshForOwner(vault, expectedOwner)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     return@withContext if (e is MomentoApiException && e.statusCode in 400..499 && e.statusCode !in listOf(401,408,429)) Result.failure() else Result.retry()
                 } ?: return@withContext Result.failure()
                 if (vault.readVerifiedAccountId() != expectedOwner ||
@@ -51,6 +46,7 @@ class MomentUploadWorker(context: Context, params: WorkerParameters) : Coroutine
                     val remoteId = client.uploadMoment(activeSession.accessToken, moment.file, moment.capturedAtMillis, requestId)
                     database.completeUpload(moment.id, requestId, remoteId)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     // 401 may mean token expiry mid-upload. Preserve the queue item,
                     // and let the bounded retry path attempt session refresh.
                     // Other 4xx (except 408/429) need user intervention.
@@ -59,66 +55,71 @@ class MomentUploadWorker(context: Context, params: WorkerParameters) : Coroutine
                             e.statusCode != 401 && e.statusCode != 408 && e.statusCode != 429)
                     database.updateUploadState(moment.id,
                         if (permanent) LocalMomentDatabase.UPLOAD_FAILED else LocalMomentDatabase.UPLOAD_QUEUED)
-                    if (!permanent) {
-                        return@withContext Result.retry()
-                    }
+                    if (!permanent) retryNeeded = true
                 }
             }
-            // Durable room sync: server room key and remote moment IDs survive process death.
-            // Only an explicit publication request can make a PUBLIC room discoverable.
+            // Drafts need explicit publication. Published vlogs also sync newly recorded,
+            // explicitly queued clips via their existing durable room mapping.
+            val pendingByRoom = database.roomSyncItems().groupBy({ it.second }, { it.first })
             val pendingRooms = rooms.getSpaces().filter {
-                it.visibility == "PUBLIC" && (it.publicationRequested || it.status == "PUBLISHED")
+                it.visibility == "PUBLIC" && (it.publicationRequested ||
+                    (it.status == "PUBLISHED" && it.id in pendingByRoom))
             }
-            for (room in pendingRooms) {
-                if (vault.readVerifiedAccountId() != expectedOwner) return@withContext Result.failure()
-                // The room may have been deleted while the previous HTTP operation was in flight.
-                if (rooms.roomById(room.id) == null) continue
-                val token = try { MomentoSessionRefresh.refreshForOwner(vault, expectedOwner)?.accessToken }
-                    catch (_: Exception) { null } ?: return@withContext Result.retry()
+            for (requestedRoom in pendingRooms) {
+                val room = rooms.roomById(requestedRoom.id) ?: continue
+                val pendingIds = pendingByRoom[room.id].orEmpty().toSet()
+                val links = rooms.momentsForRoom(room.id).filter {
+                    room.publicationRequested || it.momentId in pendingIds
+                }
+                val moments = database.getMoments().associateBy { it.id }
+                val clips = links.mapNotNull { moments[it.momentId] }
+                if (room.status == "COMPLETED" || clips.isEmpty() || clips.size != links.size ||
+                    clips.any { it.uploadState == LocalMomentDatabase.UPLOAD_FAILED }) {
+                    rooms.clearPublicationRequest(room.id)
+                    for (id in pendingIds) database.setRoomSyncPhase(id, room.id, "FAILED")
+                    continue
+                }
+                val unuploaded = clips.filter { it.remoteMomentId == null }
+                if (unuploaded.isNotEmpty()) {
+                    for (clip in unuploaded) {
+                        if (clip.uploadState == LocalMomentDatabase.UPLOAD_LOCAL_ONLY) database.queueUpload(clip.id)
+                    }
+                    retryNeeded = true
+                    continue
+                }
                 try {
-                    val remoteRoom = room.remoteId ?: client.createSyncedRoom(token,room.id,room.name,room.description,"PUBLIC")
-                        .also { rooms.saveRemoteId(room.id,it) }
-                    val links = rooms.momentsForRoom(room.id)
-                    if (links.isEmpty()) continue
-                    var complete = true
-                    for (link in links) {
-                        if (rooms.roomById(room.id) == null || vault.readVerifiedAccountId() != expectedOwner) return@withContext Result.failure()
-                        val local = database.getMoments().firstOrNull { it.id == link.momentId }
-                        if (local == null) { complete=false;break }
-                        // A recorded moment is not automatically uploaded without explicit publication.
-                        if (local.remoteMomentId == null) {
-                            if (local.uploadState != LocalMomentDatabase.UPLOAD_QUEUED && local.uploadState != LocalMomentDatabase.UPLOAD_UPLOADING)
-                                database.queueUpload(local.id)
-                            complete=false;break
-                        }
-                        if (database.roomSyncItems().any { it.first == local.id && it.second == room.id }) {
-                            client.attachUploadedMoment(token,remoteRoom,local.remoteMomentId)
-                            database.setRoomSyncPhase(local.id,"DONE")
-                        } else {
-                            // Repeating attachment is safe: server uses ON CONFLICT DO NOTHING.
-                            client.attachUploadedMoment(token,remoteRoom,local.remoteMomentId)
-                        }
+                    val token = MomentoSessionRefresh.refreshForOwner(vault, expectedOwner)?.accessToken
+                        ?: return@withContext Result.failure()
+                    val remoteRoom = room.remoteId ?: client.createSyncedRoom(
+                        token, room.id, room.name, room.description, "PUBLIC"
+                    ).also { remoteId ->
+                        if (rooms.roomById(room.id) != null) rooms.saveRemoteId(room.id, remoteId)
                     }
-                    if (!complete) {
-                        // A permanently failed local upload requires explicit user action;
-                        // do not spin forever and do not discard the original video.
-                        val blocked = links.any { link ->
-                            database.getMoments().firstOrNull { it.id == link.momentId }
-                                ?.uploadState == LocalMomentDatabase.UPLOAD_FAILED
-                        }
-                        return@withContext if (blocked) Result.failure() else Result.retry()
+                    for (clip in clips) {
+                        if (vault.readVerifiedAccountId() != expectedOwner) return@withContext Result.failure()
+                        val currentRoom = rooms.roomById(room.id) ?: break
+                        if (currentRoom.status == "COMPLETED" ||
+                            rooms.momentsForRoom(room.id).none { it.momentId == clip.id }) continue
+                        client.attachUploadedMoment(token, remoteRoom, checkNotNull(clip.remoteMomentId))
+                        database.setRoomSyncPhase(clip.id, room.id, "DONE")
                     }
-                    if (room.publicationRequested && rooms.roomById(room.id) != null) {
-                        client.publishRoom(token,remoteRoom)
-                        rooms.markPublished(room.id)
+                    if (vault.readVerifiedAccountId() != expectedOwner) return@withContext Result.failure()
+                    if (rooms.roomById(room.id)?.publicationRequested == true) {
+                        client.publishRoom(token, remoteRoom)
+                        if (rooms.roomById(room.id) != null) rooms.markPublished(room.id)
                     }
                 } catch (e: Exception) {
-                    val permanent = e is MomentoApiException && e.statusCode in 400..499 && e.statusCode !in listOf(401,408,429)
-                    if (!permanent) return@withContext Result.retry()
-                    return@withContext Result.failure()
+                    if (e is CancellationException) throw e
+                    if (rooms.roomById(room.id) == null) continue
+                    val permanent = e is MomentoApiException && e.statusCode in 400..499 &&
+                        e.statusCode !in listOf(401, 408, 429)
+                    if (permanent) {
+                        rooms.clearPublicationRequest(room.id)
+                        for (id in pendingIds) database.setRoomSyncPhase(id, room.id, "FAILED")
+                    } else retryNeeded = true
                 }
             }
-            Result.success()
+            if (retryNeeded) Result.retry() else Result.success()
         } finally {
             rooms.close()
             database.close()

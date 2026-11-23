@@ -111,7 +111,7 @@ fun MomentoApp() {
         val initial = authSession ?: return@LaunchedEffect
         val expectedToken = initial.refreshToken
         while (authSession?.refreshToken == expectedToken) {
-            val waitMillis = initial.expiresAtMillis - System.currentTimeMillis() - 60_000L
+            val waitMillis = initial.expiresAtMillis - System.currentTimeMillis() - 30_000L
             if (waitMillis > 0L) delay(waitMillis)
             if (authSession?.refreshToken != expectedToken) break
             val result = runCatching {
@@ -211,9 +211,14 @@ fun MomentoApp() {
         refreshRoomLinks(roomId)
         selectedTab = Tab.ROOM_DETAIL
     }
-    // Resume only owner-approved QUEUED uploads; no automatic publication to rooms.
-    LaunchedEffect(database, accountId) {
-        val queued = withContext(Dispatchers.IO) { database.queuedMoments().isNotEmpty() }
+    // Resume operations that the owner already requested, including interrupted uploads.
+    LaunchedEffect(database, spacesDatabase, accountId) {
+        val queued = withContext(Dispatchers.IO) {
+            val pendingRooms = database.roomSyncItems().map { it.second }.toSet()
+            database.hasPendingUploads() || spacesDatabase.getSpaces().any {
+                it.publicationRequested || (it.status == "PUBLISHED" && it.id in pendingRooms)
+            }
+        }
         if (queued) ru.momento.app.data.MomentUploadWorker.enqueue(context, accountId)
     }
     LaunchedEffect(database) {
@@ -232,14 +237,16 @@ fun MomentoApp() {
             context, rooms.filter { it.status != "COMPLETED" && it.status != "DELETED" }.map { it.id }.toSet()
         )
     }
-    // WorkManager writes to SQLite outside Compose state. Refresh only while the
-    // archive is visible and uploads are pending; otherwise the UI can show
-    // "Отправляется" forever after the background worker has finished.
-    LaunchedEffect(database, selectedTab) {
-        if (selectedTab != Tab.ARCHIVE) return@LaunchedEffect
+    // Refresh the visible archive and room status after WorkManager updates SQLite.
+    LaunchedEffect(database, spacesDatabase, selectedTab) {
+        if (selectedTab !in setOf(Tab.ARCHIVE, Tab.ROOM_DETAIL, Tab.MINE)) return@LaunchedEffect
         while (true) {
             delay(2_000L)
-            val latest = withContext(Dispatchers.IO) { database.getMoments() }
+            val (latest, rooms) = withContext(Dispatchers.IO) { database.getMoments() to spacesDatabase.getSpaces() }
+            if (rooms != localSpaces.toList()) {
+                localSpaces.clear()
+                localSpaces.addAll(rooms)
+            }
             if (latest != savedMoments.toList()) {
                 savedMoments.clear()
                 savedMoments.addAll(latest)
@@ -320,11 +327,14 @@ fun MomentoApp() {
                     onPublish = {
                         scope.launch {
                             val result = runCatching { withContext(Dispatchers.IO) {
+                                val links = spacesDatabase.momentsForRoom(room.id)
+                                val moments = database.getMoments().associateBy { it.id }
+                                val clips = links.map { checkNotNull(moments[it.momentId]) { "Видео отсутствует на устройстве" } }
                                 spacesDatabase.requestPublication(room.id)
-                                spacesDatabase.momentsForRoom(room.id).forEach { link ->
-                                    database.markForRoomSync(link.momentId,room.id)
-                                    val moment = database.getMoments().firstOrNull { it.id == link.momentId }
-                                    if (moment?.remoteMomentId == null) database.queueUpload(link.momentId)
+                                for (clip in clips) {
+                                    if (clip.uploadState in setOf(LocalMomentDatabase.UPLOAD_FAILED, LocalMomentDatabase.UPLOAD_LOCAL_ONLY)) {
+                                        database.queueUpload(clip.id)
+                                    }
                                 }
                             } }
                             result.onSuccess {
@@ -379,12 +389,12 @@ fun MomentoApp() {
                         savedMoments.add(0, record)
                         if (activeRoomId != null) {
                             val roomId = activeRoomId!!
-                            runCatching { withContext(Dispatchers.IO) { spacesDatabase.addMoment(roomId, record.id) } }
-                                .onFailure { archiveError = "Видео сохранено, но не добавлено в комнату" }
+                            val added = runCatching { withContext(Dispatchers.IO) { spacesDatabase.addMoment(roomId, record.id) } }
+                            added.onFailure { archiveError = "Видео сохранено, но не добавлено в комнату" }
                             // A published public room is an ongoing vlog: newly captured moments
                             // join its durable upload queue without another publish button.
                             val currentRoom = localSpaces.firstOrNull { it.id == roomId }
-                            if (currentRoom?.visibility == "PUBLIC" && currentRoom.status == "PUBLISHED") {
+                            if (added.isSuccess && currentRoom?.visibility == "PUBLIC" && currentRoom.status == "PUBLISHED") {
                                 val queued = runCatching { withContext(Dispatchers.IO) {
                                     database.markForRoomSync(record.id, roomId)
                                     database.queueUpload(record.id)

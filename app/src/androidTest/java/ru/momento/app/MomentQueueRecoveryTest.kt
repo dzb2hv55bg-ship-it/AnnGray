@@ -6,6 +6,7 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import ru.momento.app.data.LocalMomentDatabase
+import ru.momento.app.data.LocalSpaceDatabase
 import android.content.Context
 import java.io.File
 import java.util.UUID
@@ -23,6 +24,7 @@ class MomentQueueRecoveryTest {
                 val moment = db.insertMoment(file, 3000)
                 val first = db.queueUpload(moment.id)
                 db.updateUploadState(moment.id, LocalMomentDatabase.UPLOAD_UPLOADING)
+                assertTrue(db.hasPendingUploads())
                 db.recoverInterruptedUploads()
                 val pending = db.queuedMoments().single()
                 assertEquals(first, pending.uploadRequestId)
@@ -36,6 +38,48 @@ class MomentQueueRecoveryTest {
                 assertTrue(queued.file.exists())
             }
         } finally { file.delete(); context.deleteDatabase(LocalMomentDatabase.databaseNameForAccount(owner)) }
+    }
+
+    @Test fun permanentFailureRequiresExplicitRetry() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val owner = UUID.randomUUID().toString()
+        val file = File.createTempFile("failed-upload-", ".mp4", context.cacheDir)
+        file.writeBytes(byteArrayOf(1))
+        try {
+            LocalMomentDatabase(context, owner).use { db ->
+                val moment = db.insertMoment(file, 3000)
+                val requestId = db.queueUpload(moment.id)
+                db.updateUploadState(moment.id, LocalMomentDatabase.UPLOAD_FAILED)
+                db.recoverInterruptedUploads()
+                assertFalse(db.hasPendingUploads())
+                assertTrue(db.queuedMoments().isEmpty())
+                assertTrue(file.exists())
+                assertEquals(requestId, db.queueUpload(moment.id))
+            }
+        } finally {
+            file.delete()
+            context.deleteDatabase(LocalMomentDatabase.databaseNameForAccount(owner))
+        }
+    }
+
+    @Test fun blockedPublicationCanBeRequestedAgain() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val owner = UUID.randomUUID().toString()
+        try {
+            LocalSpaceDatabase(context, owner).use { db ->
+                val room = db.createRoom("Test room", "", "PUBLIC", "Other")
+                val clipId = UUID.randomUUID().toString()
+                db.addMoment(room.id, clipId)
+                db.requestPublication(room.id)
+                db.clearPublicationRequest(room.id)
+                assertFalse(db.roomById(room.id)!!.publicationRequested)
+                assertEquals(listOf(clipId), db.momentsForRoom(room.id).map { it.momentId })
+                db.requestPublication(room.id)
+                assertTrue(db.roomById(room.id)!!.publicationRequested)
+            }
+        } finally {
+            context.deleteDatabase("spaces_${LocalMomentDatabase.databaseNameForAccount(owner)}")
+        }
     }
 
     @Test fun differentAccountCannotSeeQueuedMoments() {

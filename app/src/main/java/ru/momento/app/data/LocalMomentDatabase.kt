@@ -75,16 +75,16 @@ class LocalMomentDatabase(context: Context, private val accountId: String) : SQL
     @Synchronized
     fun roomSyncItems(): List<Pair<String,String>> {
         val result = mutableListOf<Pair<String,String>>()
-        readableDatabase.rawQuery("SELECT id,sync_room_id FROM moments WHERE sync_room_id IS NOT NULL AND sync_phase != 'DONE' ORDER BY captured_at_ms ASC",null).use { c ->
+        readableDatabase.rawQuery("SELECT id,sync_room_id FROM moments WHERE sync_room_id IS NOT NULL AND sync_phase IN ('QUEUED', 'ATTACHED') ORDER BY captured_at_ms ASC",null).use { c ->
             while(c.moveToNext()) result += c.getString(0) to c.getString(1)
         }
         return result
     }
 
     @Synchronized
-    fun setRoomSyncPhase(momentId: String, phase: String) {
+    fun setRoomSyncPhase(momentId: String, roomId: String, phase: String) {
         require(phase in setOf("QUEUED","ATTACHED","DONE","FAILED"))
-        writableDatabase.update("moments",ContentValues().apply { put("sync_phase",phase) },"id=?",arrayOf(momentId))
+        writableDatabase.update("moments",ContentValues().apply { put("sync_phase",phase) },"id=? AND sync_room_id=?", arrayOf(momentId, roomId))
     }
 
     @Synchronized
@@ -181,6 +181,11 @@ class LocalMomentDatabase(context: Context, private val accountId: String) : SQL
         }
         return result
     }
+
+    fun hasPendingUploads(): Boolean = readableDatabase.rawQuery(
+        "SELECT 1 FROM moments WHERE upload_state IN ('QUEUED', 'UPLOADING') AND upload_request_id IS NOT NULL LIMIT 1",
+        null
+    ).use { it.moveToFirst() }
 
     /** WorkManager may only process records explicitly queued by the owner. */
     @Synchronized
