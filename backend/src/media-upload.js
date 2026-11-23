@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, writeFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -57,16 +56,17 @@ export async function storeMomentUpload(pool, userId, bytes, { storageDir, captu
   if (!dir) return { error: 'MEDIA_STORAGE_NOT_CONFIGURED', status: 503 };
   const id = randomUUID();
   const key = `${id}.mp4`;
-  const tmp = join(tmpdir(), `momento-upload-${id}.mp4`);
+  // Keep staging and final files on the same volume so rename stays atomic.
+  const tmp = join(dir, `.${id}.uploading`);
   const target = join(dir, key);
   let published = false;
   let committed = false;
   try {
+    await mkdir(dir, { recursive: true, mode: 0o700 });
     await writeFile(tmp, bytes, { flag: 'wx', mode: 0o600 });
     const probe = probeFn ? await probeFn(tmp) : JSON.parse((await execFileAsync('ffprobe', ['-v','error','-show_entries','format=duration:stream=codec_type,codec_name,width,height','-of','json',tmp], {timeout: 10000, maxBuffer: 64 * 1024})).stdout);
     const checked = validateVideoProbe(probe);
     if (checked.error) return checked;
-    await mkdir(dir, { recursive: true, mode: 0o700 });
     await rename(tmp, target);
     published = true;
     const checksum = createHash('sha256').update(bytes).digest();

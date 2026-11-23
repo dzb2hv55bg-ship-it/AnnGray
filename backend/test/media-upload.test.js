@@ -23,7 +23,7 @@ test('normalizes valid idempotency keys',()=>assert.equal(validateClientRequestI
 test('upload retry after lost acknowledgement reuses the committed moment', async () => {
   const { mkdtemp, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
-  const { join } = await import('node:path');
+  const { dirname, join } = await import('node:path');
   const dir = await mkdtemp(join(tmpdir(), 'momento-idempotency-'));
   const owner = '123e4567-e89b-42d3-a456-426614174000';
   const request = '123e4567-e89b-42d3-a456-426614174001';
@@ -43,7 +43,10 @@ test('upload retry after lost acknowledgement reuses the committed moment', asyn
     release() {}
   };
   const pool = { async connect() { return client; } };
-  const args = { storageDir: dir, capturedAt: new Date().toISOString(), clientRequestId: request, probeFn: async () => probe };
+  const args = { storageDir: dir, capturedAt: new Date().toISOString(), clientRequestId: request, probeFn: async (path) => {
+    assert.equal(dirname(path), dir);
+    return probe;
+  } };
   try {
     const bytes = Buffer.from('sample-mp4-fixture');
     const first = await storeMomentUpload(pool, owner, bytes, args);

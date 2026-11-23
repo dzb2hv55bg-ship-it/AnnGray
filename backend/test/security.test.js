@@ -26,6 +26,7 @@ test('integer validation enforces explicit bounds', () => {
 
 test('room validation enforces name and private invite-only policy', () => {
   assert.equal(validateCreateSpace({ name: 'Семья', kind: 'CIRCLE', visibility: 'PRIVATE', joinPolicy: 'INVITE_ONLY' }).value.name, 'Семья');
+  assert.equal(validateCreateSpace({ name: 'Я', kind: 'CIRCLE', visibility: 'PUBLIC', joinPolicy: 'OPEN' }).value.name, 'Я');
   assert.ok(validateCreateSpace({ name: ' ', kind: 'CIRCLE', visibility: 'PRIVATE', joinPolicy: 'INVITE_ONLY' }).error);
   assert.ok(validateCreateSpace({ name: 'Public', kind: 'CIRCLE', visibility: 'PRIVATE', joinPolicy: 'OPEN' }).error);
   assert.ok(validateCreateSpace({ name: 'x'.repeat(61), kind: 'CIRCLE', visibility: 'PUBLIC', joinPolicy: 'OPEN' }).error);

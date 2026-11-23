@@ -10,7 +10,7 @@ export function validateCreateSpace(body) {
   const kind = body?.kind;
   const visibility = body?.visibility;
   const joinPolicy = body?.joinPolicy;
-  if (name.length < 2 || name.length > 60) return { error: 'name must contain 2–60 characters' };
+  if (name.length < 1 || name.length > 60) return { error: 'name must contain 1–60 characters' };
   if (description.length > 500) return { error: 'description must be at most 500 characters' };
   if (!SPACE_KINDS.has(kind) || !VISIBILITIES.has(visibility) || !JOIN_POLICIES.has(joinPolicy)) {
     return { error: 'invalid room kind, visibility or join policy' };

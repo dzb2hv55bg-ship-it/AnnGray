@@ -19,14 +19,27 @@ This is an initial server implementation, not a deployed service or production-r
 
 ## Local setup
 
-1. Install Node.js 22+ and Docker Compose.
-2. Start PostgreSQL: `docker compose up -d postgres` from this directory.
-3. Apply the migration from repository root:
+1. Install Node.js 22+, PostgreSQL client tools, Docker Compose and FFmpeg.
+2. Start PostgreSQL with `docker compose up -d postgres` from this directory.
+3. Copy `.env.example` to `.env`. Configure `PUBLIC_APP_URL` and generate independent secrets for the authentication and OTP settings.
+4. Load the environment and apply all migrations in order to a fresh local database:
 
-   `psql "postgresql://momento:momento_local_only@localhost:5432/momento" -f db/migrations/001_initial_schema.sql`
+   ```bash
+   set -a
+   source .env
+   set +a
+   for migration in db/migrations/*.sql; do
+     psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration" || break
+   done
+   ```
 
-4. Copy `.env.example` to `.env`. Configure `PUBLIC_APP_URL`. Generate independent random values for `MOMENTO_JWT_SECRET` and `REFRESH_TOKEN_PEPPER`; never reuse the same secret or put either in the Android app. `JWT_ISSUER`, `JWT_AUDIENCE` and `JWT_JWKS_URL` are optional and only enable the legacy upstream OIDC bridge.
-5. Apply `db/migrations/001_initial_schema.sql`, `db/migrations/002_auth_channels.sql`, `db/migrations/003_auth_session_hardening.sql` and `db/migrations/004_auth_provider_nonce.sql` in order (the first migration is shown above). Export the variables from `.env` in your shell (the API intentionally does not load `.env` implicitly), then run `npm install`, `npm test`, `npm run check`, `npm start`.
+5. Run `npm ci`, then `npm test` and `npm start`. Check `GET /ready` before connecting an Android build.
+
+### Test server container
+
+Build from this directory with `docker build -t momento-api .`. The image includes `ffprobe` for upload validation and runs the API as an unprivileged user. Configure the deployment to inject the variables from `.env.example`, connect to a migrated PostgreSQL database, mount persistent writable storage at `/var/lib/momento/media`, and terminate HTTPS at the ingress. The health check uses `GET /ready`.
+
+Use the deployed HTTPS API origin as the Android build's `momentoApiBaseUrl` or set the repository Actions variable `MOMENTO_API_URL`. Configure the selected login providers separately.
 
 ### Authentication (0.13.0)
 
@@ -57,7 +70,7 @@ The Android sign-in screen is wired to the Google, Yandex and VK SDKs and to the
 - `POST /v1/auth/logout` revokes a session by its refresh token, including when the short-lived access token has expired. `GET /v1/auth/me` returns the current account summary.
 - Refresh tokens are random opaque values; only a peppered HMAC is stored in PostgreSQL. Keep the pepper and JWT secret in a managed secret store in production.
 
-**Production activation is not complete:** dedicated Google, Yandex, VK and OTP routes are implemented, but they have not been verified against real registered apps, a live PostgreSQL deployment or actual mail/SMS vendors. Configure provider apps and delivery services, run migrations 001–004 and complete the production QA checklist before enabling public sign-in.
+**Production activation is not complete:** dedicated Google, Yandex, VK and OTP routes are implemented, but they have not been verified against real registered apps, a live PostgreSQL deployment or actual mail/SMS vendors. Configure provider apps and delivery services, apply all database migrations and complete the production QA checklist before enabling public sign-in.
 
 ## Important safety and deployment gaps
 
