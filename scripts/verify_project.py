@@ -89,7 +89,8 @@ assert "OTP:${contactType}:" in otp_auth
 app_ui = (ROOT / "app/src/main/java/ru/momento/app/ui/MomentoApp.kt").read_text()
 assert "delay(waitMillis)" in app_ui and "delay(15_000L)" in app_ui
 assert "deliverOtp" in server and "OTP_HMAC_SECRET" in server
-assert "003_auth_session_hardening.sql" in (ROOT / "backend/README.md").read_text()
+assert (ROOT / "backend/db/migrations/003_auth_session_hardening.sql").is_file()
+assert "db/migrations/*.sql" in (ROOT / "backend/README.md").read_text()
 assert "REFRESH_REPLAY" in server and "/v1/auth/refresh" in server and "/v1/auth/logout" in server
 assert (ROOT / "docs/AUTHENTICATION_DESIGN.md").exists()
 
