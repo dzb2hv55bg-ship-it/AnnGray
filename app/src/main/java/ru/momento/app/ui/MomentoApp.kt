@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.LocalActivity
 import androidx.compose.ui.platform.LocalContext
 import androidx.credentials.CredentialManager
 import androidx.credentials.ClearCredentialStateRequest
@@ -86,7 +87,7 @@ private enum class Tab(val label: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MomentoApp() {
-    val launchActivity = LocalContext.current as? android.app.Activity
+    val launchActivity = LocalActivity.current
     val initialRoom = launchActivity?.intent?.getStringExtra("record_room_id")
     var selectedTab by rememberSaveable { mutableStateOf(if (initialRoom != null) Tab.RECORD else Tab.SPACES) }
     var archiveError by rememberSaveable { mutableStateOf<String?>(null) }
@@ -519,7 +520,7 @@ private fun HomeScreen(
             items(moments.take(3), key = { "home_${it.id}" }) { moment ->
                 Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onArchiveClick)) {
                     Column(Modifier.padding(16.dp)) {
-                        Text(SimpleDateFormat("d MMMM yyyy · HH:mm", Locale("ru", "RU"))
+                        Text(SimpleDateFormat("d MMMM yyyy · HH:mm", Locale.forLanguageTag("ru-RU"))
                             .format(Date(moment.capturedAtMillis)), fontWeight = FontWeight.SemiBold)
                         Text("${moment.durationMillis / 1000.0} сек · Открыть в архиве",
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -562,7 +563,7 @@ private fun ArchiveScreen(
             Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(Modifier.padding(12.dp)) {
                     Text(
-                        SimpleDateFormat("d MMMM yyyy · HH:mm", Locale("ru", "RU")).format(Date(moment.capturedAtMillis)),
+                        SimpleDateFormat("d MMMM yyyy · HH:mm", Locale.forLanguageTag("ru-RU")).format(Date(moment.capturedAtMillis)),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -665,7 +666,7 @@ private fun SpacesScreen(
                     ) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             Text(space.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            Text("Создана ${SimpleDateFormat("d MMM yyyy · HH:mm", Locale("ru", "RU")).format(Date(space.createdAtMillis))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Создана ${SimpleDateFormat("d MMM yyyy · HH:mm", Locale.forLanguageTag("ru-RU")).format(Date(space.createdAtMillis))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text("Сохранена на этом устройстве · синхронизация ещё не подключена", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                         }
                     }

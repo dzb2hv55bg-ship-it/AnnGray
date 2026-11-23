@@ -32,7 +32,7 @@ fun LifeCalendarScreen(moments: List<LocalMoment>) {
         }.timeInMillis
     }
     val dayFormatter = remember { SimpleDateFormat("yyyy-MM-dd", Locale.ROOT) }
-    val displayFormatter = remember { SimpleDateFormat("dd MMMM yyyy", Locale("ru")) }
+    val displayFormatter = remember { SimpleDateFormat("dd MMMM yyyy", Locale.forLanguageTag("ru")) }
     val groups = remember(moments.toList(), period) {
         moments.filter { it.capturedAtMillis >= start && it.capturedAtMillis <= System.currentTimeMillis() }
             .groupBy { dayFormatter.format(Date(it.capturedAtMillis)) }

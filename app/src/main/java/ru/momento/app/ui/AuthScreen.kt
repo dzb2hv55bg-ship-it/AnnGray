@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
@@ -102,7 +103,7 @@ fun AuthScreen(
     }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val activity = context as? ComponentActivity
+    val activity = LocalActivity.current as? ComponentActivity
     val client = remember { MomentoAuthClient(BuildConfig.MOMENTO_API_BASE_URL) }
     val apiConfigured = BuildConfig.MOMENTO_API_CONFIGURED
     val credentialManager = remember(context) { CredentialManager.create(context) }
@@ -339,7 +340,7 @@ fun ProfileAuthSection(
     var message by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val activity = context as? ComponentActivity
+    val activity = LocalActivity.current as? ComponentActivity
     val credentialManager = remember(context) { CredentialManager.create(context) }
     val yandexSdk = remember(context) { YandexAuthSdk.create(YandexAuthOptions(context)) }
     val yandexLinkLauncher = rememberLauncherForActivityResult(yandexSdk.contract) { result ->
@@ -404,12 +405,13 @@ fun ProfileAuthSection(
                     message = "VK ID не настроен для этой сборки"
                 } else {
                     linkingBusy = true; message = null
+                    val momentoToken = accessToken
                     scope.launch {
                         VKID.instance.authorize(activity, object : VKIDAuthCallback {
-                            override fun onAuth(providerToken: com.vk.id.AccessToken) {
+                            override fun onAuth(accessToken: com.vk.id.AccessToken) {
                                 scope.launch {
                                     runCatching {
-                                        withContext(Dispatchers.IO) { client.linkVk(accessToken, providerToken.token) }
+                                        withContext(Dispatchers.IO) { client.linkVk(momentoToken, accessToken.token) }
                                     }.onSuccess { message = "VK ID привязан к аккаунту" }
                                         .onFailure { message = it.message ?: "Не удалось привязать VK ID" }
                                     linkingBusy = false
