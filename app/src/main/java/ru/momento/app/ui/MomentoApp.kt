@@ -140,13 +140,16 @@ fun MomentoApp() {
         }
     }
     var guestMode by rememberSaveable { mutableStateOf(false) }
+    var guestTab by rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
     var guestPublishing by rememberSaveable { mutableStateOf(false) }
     var guestLoginOnly by rememberSaveable { mutableStateOf(false) }
     if (authSession == null && guestMode && !guestPublishing) {
         GuestHomeScreen(
+            selectedTab = guestTab,
+            onTabSelected = { guestTab = it },
             onPublish = { guestPublishing = true; guestLoginOnly = false },
             onSignIn = { guestPublishing = true; guestLoginOnly = true },
-            onLeave = { guestMode = false }
+            onLeave = { guestMode = false; guestTab = 0 }
         )
         return
     }
@@ -158,7 +161,7 @@ fun MomentoApp() {
             if (!guestLoginOnly) Text("Чтобы записывать и публиковать моменты, сначала войди в аккаунт.", modifier = Modifier.padding(16.dp))
         }
         AuthScreen(vault = sessionVault,
-            onAuthenticated = { authSession = it; if (guestPublishing && !guestLoginOnly) selectedTab = Tab.CREATE; guestPublishing = false; guestMode = false },
+            onAuthenticated = { authSession = it; if (guestPublishing && !guestLoginOnly) selectedTab = Tab.RECORD; guestPublishing = false; guestMode = false; guestTab = 0 },
             onGuest = { guestMode = true; guestPublishing = false })
         return
     }

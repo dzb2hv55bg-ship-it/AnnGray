@@ -4,11 +4,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PersonOutline
-import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material.icons.filled.CollectionsBookmark
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -25,12 +20,17 @@ import ru.momento.app.network.RemoteSpace
 
 /** Guest is a UI state, never an implicit account or a substitute for an access token. */
 @Composable
-fun GuestHomeScreen(onPublish: () -> Unit, onSignIn: () -> Unit, onLeave: () -> Unit) {
+fun GuestHomeScreen(
+    selectedTab: Int,
+    onTabSelected: (Int) -> Unit,
+    onPublish: () -> Unit,
+    onSignIn: () -> Unit,
+    onLeave: () -> Unit
+) {
     var rooms by remember { mutableStateOf<List<RemoteSpace>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var unavailable by remember { mutableStateOf(!BuildConfig.MOMENTO_API_CONFIGURED) }
     var openedRoom by remember { mutableStateOf<String?>(null) }
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var retry by remember { mutableIntStateOf(0) }
     val api = remember { MomentoApiClient() }
@@ -60,7 +60,7 @@ fun GuestHomeScreen(onPublish: () -> Unit, onSignIn: () -> Unit, onLeave: () -> 
     }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = { MomentoNavigationBar(selectedTab) { selectedTab = it } }
+        bottomBar = { MomentoNavigationBar(selectedTab, onTabSelected) }
     ) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp, vertical = 16.dp),
@@ -118,7 +118,9 @@ private fun ColumnScope.PublicRooms(
             if (BuildConfig.MOMENTO_API_CONFIGURED)
                 "Не удалось связаться с сервером. Проверь интернет и попробуй ещё раз."
             else "Сервер MOMENTO пока не подключён к этой сборке. Гостевой интерфейс доступен офлайн.",
-            "Повторить", onRetry, isError = BuildConfig.MOMENTO_API_CONFIGURED
+            actionLabel = if (BuildConfig.MOMENTO_API_CONFIGURED) "Повторить" else null,
+            onAction = onRetry,
+            isError = BuildConfig.MOMENTO_API_CONFIGURED
         )
     } else if (!loading && rooms.isEmpty()) {
         MomentoStatePanel(
