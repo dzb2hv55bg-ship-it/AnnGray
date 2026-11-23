@@ -155,15 +155,30 @@ fun MomentoApp() {
         return
     }
     if (authSession == null) {
-        if (guestPublishing) {
-            androidx.compose.material3.TextButton(onClick = { guestPublishing = false }) {
-                Text("Отмена — вернуться в гостевой режим")
+        Column(Modifier.fillMaxSize()) {
+            if (guestPublishing) {
+                TextButton(onClick = { guestPublishing = false }) {
+                    Text("Отмена — вернуться в гостевой режим")
+                }
+                if (!guestLoginOnly) {
+                    Text("Чтобы записывать и публиковать моменты, сначала войди в аккаунт.",
+                        modifier = Modifier.padding(16.dp))
+                }
             }
-            if (!guestLoginOnly) Text("Чтобы записывать и публиковать моменты, сначала войди в аккаунт.", modifier = Modifier.padding(16.dp))
+            Box(Modifier.weight(1f)) {
+                AuthScreen(
+                    vault = sessionVault,
+                    onAuthenticated = {
+                        authSession = it
+                        if (guestPublishing && !guestLoginOnly) selectedTab = Tab.RECORD
+                        guestPublishing = false
+                        guestMode = false
+                        guestTab = 0
+                    },
+                    onGuest = { guestMode = true; guestPublishing = false }
+                )
+            }
         }
-        AuthScreen(vault = sessionVault,
-            onAuthenticated = { authSession = it; if (guestPublishing && !guestLoginOnly) selectedTab = Tab.RECORD; guestPublishing = false; guestMode = false; guestTab = 0 },
-            onGuest = { guestMode = true; guestPublishing = false })
         return
     }
     // Fail closed until /auth/me verifies which account owns the local archive.

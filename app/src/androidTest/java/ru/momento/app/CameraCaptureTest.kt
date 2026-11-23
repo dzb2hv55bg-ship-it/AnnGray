@@ -7,7 +7,8 @@ import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -40,11 +41,11 @@ class CameraCaptureTest {
         vault.save(MomentoAuthSession("test-access", "test-refresh", "Bearer", 600), owner)
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
-                composeRule.onNodeWithContentDescription("Камера").performClick()
-                if (withAudio) composeRule.onNodeWithText("Включить микрофон").performClick()
+                composeRule.onNodeWithContentDescription("Камера").performSemanticsAction(SemanticsActions.OnClick) { it() }
+                if (withAudio) composeRule.onNodeWithText("Включить микрофон").performSemanticsAction(SemanticsActions.OnClick) { it() }
                 val ready = hasContentDescription("Начать запись") and isEnabled()
                 composeRule.waitUntil(20_000) { composeRule.onAllNodes(ready).fetchSemanticsNodes().isNotEmpty() }
-                composeRule.onNode(ready).performClick()
+                composeRule.onNode(ready).performSemanticsAction(SemanticsActions.OnClick) { it() }
                 LocalMomentDatabase(context, owner).use { database ->
                     composeRule.waitUntil(20_000) { database.getMoments().isNotEmpty() }
                     val clip = database.getMoments().single()
