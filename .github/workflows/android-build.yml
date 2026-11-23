@@ -99,6 +99,7 @@ jobs:
           api-level: 35
           target: google_apis
           arch: x86_64
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back emulated
           script: ./gradlew :app:connectedDebugAndroidTest -PmomentoAllowOfflinePreview=true -PmomentoRequireLiveAuth=false --stacktrace --no-daemon
   release:
     if: github.event_name == 'workflow_dispatch'

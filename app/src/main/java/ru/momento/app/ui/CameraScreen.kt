@@ -52,6 +52,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -208,7 +210,10 @@ fun CameraScreen(
                     }
                     val stamp = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
                     val output = File(directory, "moment_$stamp.mp4")
-                    val options = FileOutputOptions.Builder(output).build()
+                    // Leave room for the last encoded frame and container timestamps.
+                    val options = FileOutputOptions.Builder(output)
+                        .setDurationLimitMillis(LocalMomentDatabase.MAX_DURATION_MS - 100)
+                        .build()
                     errorMessage = null
                     secondsElapsed = 0
                     secondsLeft = 5
@@ -226,7 +231,8 @@ fun CameraScreen(
                                 if (cancelledPaths.remove(output.absolutePath)) {
                                     output.delete()
                                     errorMessage = "Запись отменена"
-                                } else if (!event.hasError() && output.exists() && output.length() > 0L) {
+                                } else if ((!event.hasError() || event.error == VideoRecordEvent.Finalize.ERROR_DURATION_LIMIT_REACHED) &&
+                                    output.isFile && output.length() > 0L) {
                                     val duration = LocalMomentDatabase.readCaptureDuration(output)
                                     if (duration != null) {
                                         // Keep the only successful file until the caller has indexed it.
@@ -253,7 +259,9 @@ fun CameraScreen(
                     }
                 },
                 enabled = hasCameraPermission && videoCapture != null && !isBusy,
-                modifier = Modifier.padding(bottom = 20.dp).size(86.dp),
+                modifier = Modifier.padding(bottom = 20.dp).size(86.dp).semantics {
+                    contentDescription = "Начать запись"
+                },
                 shape = CircleShape,
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
