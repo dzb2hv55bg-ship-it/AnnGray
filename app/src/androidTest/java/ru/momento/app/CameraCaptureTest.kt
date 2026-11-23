@@ -1,10 +1,12 @@
 package ru.momento.app
 
 import android.Manifest
+import android.media.MediaMetadataRetriever
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -23,10 +25,14 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class CameraCaptureTest {
-    @get:Rule val cameraPermission = GrantPermissionRule.grant(Manifest.permission.CAMERA)
+    @get:Rule val cameraPermission = GrantPermissionRule.grant(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
     @get:Rule val composeRule = createEmptyComposeRule()
 
-    @Test fun recordingStopsAndSavesPlayableLocalVideo() {
+    @Test fun recordingWithoutMicrophoneSavesSilentVideo() = recordClip(withAudio = false)
+
+    @Test fun recordingWithMicrophoneSavesAudioTrack() = recordClip(withAudio = true)
+
+    private fun recordClip(withAudio: Boolean) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val owner = UUID.randomUUID().toString()
         val databaseName = LocalMomentDatabase.databaseNameForAccount(owner)
@@ -35,6 +41,7 @@ class CameraCaptureTest {
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
                 composeRule.onNodeWithContentDescription("Камера").performClick()
+                if (withAudio) composeRule.onNodeWithText("Включить микрофон").performClick()
                 val ready = hasContentDescription("Начать запись") and isEnabled()
                 composeRule.waitUntil(20_000) { composeRule.onAllNodes(ready).fetchSemanticsNodes().isNotEmpty() }
                 composeRule.onNode(ready).performClick()
@@ -45,6 +52,13 @@ class CameraCaptureTest {
                     assertTrue(clip.durationMillis in 2_000L..5_000L)
                     assertEquals(clip.durationMillis, LocalMomentDatabase.readCaptureDuration(clip.file))
                     assertEquals(LocalMomentDatabase.UPLOAD_LOCAL_ONLY, clip.uploadState)
+                    val metadata = MediaMetadataRetriever()
+                    try {
+                        metadata.setDataSource(clip.localPath)
+                        assertEquals(withAudio, metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO) == "yes")
+                    } finally {
+                        metadata.release()
+                    }
                 }
             }
         } finally {

@@ -176,7 +176,7 @@ assert "scripts/restore_gradle_wrapper.sh" in android_workflow
 assert ":app:testDebugUnitTest" in android_workflow
 assert ":app:lintDebug" in android_workflow
 assert "contents: read" in android_workflow
-assert "MOMENTO-offline-preview-apk" in android_workflow
+assert "MOMENTO-offline-debug.apk" in android_workflow
 
 # The rooms-first UI must use actual account-scoped local data, not invented public listings.
 rooms_ui = (ROOT / "app/src/main/java/ru/momento/app/ui/RoomsExperience.kt").read_text()

@@ -2,6 +2,7 @@ package ru.momento.app.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.annotation.SuppressLint
 import ru.momento.app.data.LocalMomentDatabase
 import android.os.SystemClock
 import android.os.StatFs
@@ -46,6 +47,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,6 +81,7 @@ fun CameraScreen(
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
     }
     var permissionDenied by remember { mutableStateOf(false) }
+    var recordAudio by rememberSaveable { mutableStateOf(false) }
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     var videoCapture by remember { mutableStateOf<VideoCapture<Recorder>?>(null) }
     var recording by remember { mutableStateOf<Recording?>(null) }
@@ -94,6 +97,11 @@ fun CameraScreen(
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         hasCameraPermission = granted
         permissionDenied = !granted
+    }
+
+    val microphoneLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        recordAudio = granted
+        if (!granted) errorMessage = "Микрофон отключён. Можно записать видео без звука."
     }
 
     LaunchedEffect(Unit) {
@@ -197,6 +205,16 @@ fun CameraScreen(
         errorMessage?.let { Text(it, color = Color(0xFFFF8A80), modifier = Modifier.padding(8.dp)) }
 
         MomentoRecordingStatus(isRecording, secondsElapsed)
+        OutlinedButton(
+            onClick = {
+                errorMessage = null
+                if (recordAudio) recordAudio = false
+                else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    recordAudio = true
+                } else microphoneLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            },
+            enabled = !isBusy
+        ) { Text(if (recordAudio) "Выключить микрофон" else "Включить микрофон") }
         Text(if (isRecording) "Не закрывай камеру до сохранения" else "Только камера · без загрузки готовых видео",
             color = Color.LightGray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(12.dp))
             Button(
@@ -220,7 +238,17 @@ fun CameraScreen(
                     isBusy = true
                     activeOutput = output
                     try {
-                    recording = capture.output.prepareRecording(context, options).start(mainExecutor) { event ->
+                    val pending = capture.output.prepareRecording(context, options)
+                    val audioGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                        PackageManager.PERMISSION_GRANTED
+                    if (recordAudio && !audioGranted) {
+                        recordAudio = false
+                        errorMessage = "Микрофон отключён. Видео будет записано без звука."
+                    }
+                    // Permission is checked here because it can change while the screen is open.
+                    @SuppressLint("MissingPermission")
+                    val prepared = if (recordAudio && audioGranted) pending.withAudioEnabled() else pending
+                    recording = prepared.start(mainExecutor) { event ->
                         when (event) {
                             is VideoRecordEvent.Start -> { startedAt = SystemClock.elapsedRealtime(); isRecording = true }
                             is VideoRecordEvent.Finalize -> {

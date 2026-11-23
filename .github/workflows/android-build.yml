@@ -57,11 +57,24 @@ jobs:
             android-tests-lint.log
             app/build/reports/**
           if-no-files-found: ignore
+      - name: Prepare and verify deliverables
+        run: |
+          mkdir -p deliverables
+          cp app/build/outputs/apk/debug/app-debug.apk deliverables/MOMENTO-offline-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify deliverables/MOMENTO-offline-debug.apk
+          git archive --format=zip --prefix=MOMENTO/ --output=deliverables/MOMENTO-source.zip HEAD
+          unzip -tq deliverables/MOMENTO-source.zip
       - name: Upload offline preview APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
-          name: MOMENTO-offline-preview-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: deliverables/MOMENTO-offline-debug.apk
+          archive: false
+          if-no-files-found: error
+      - name: Upload source ZIP
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          path: deliverables/MOMENTO-source.zip
+          archive: false
           if-no-files-found: error
       - name: Build configured debug APK when an HTTPS API is available
         if: vars.MOMENTO_API_URL != ''
@@ -93,14 +106,33 @@ jobs:
       - uses: android-actions/setup-android@v4.0.4
       - run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'platform-tools' 'system-images;android-35;google_apis;x86_64'
       - run: bash scripts/restore_gradle_wrapper.sh
+      - name: Enable KVM access when available
+        run: |
+          if [[ -c /dev/kvm ]]; then
+            echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+            sudo udevadm control --reload-rules
+            sudo udevadm trigger --name-match=kvm
+          else
+            echo 'ANDROID_I_WANT_MY_TCG=yes' >> "$GITHUB_ENV"
+          fi
       - name: Run instrumented tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           target: google_apis
           arch: x86_64
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back emulated
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back emulated
           script: ./gradlew :app:connectedDebugAndroidTest -PmomentoAllowOfflinePreview=true -PmomentoRequireLiveAuth=false --stacktrace --no-daemon
+      - name: Upload device test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MOMENTO-device-tests
+          path: |
+            app/build/outputs/androidTest-results/connected/
+            app/build/reports/androidTests/connected/
+          if-no-files-found: ignore
   release:
     if: github.event_name == 'workflow_dispatch'
     needs: debug
