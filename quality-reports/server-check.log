@@ -1,0 +1,4 @@
+
+> momento-api@0.47.0 check
+> node --check src/server.js && node --check src/request-json.js && node --check src/security.js && node --check src/auth-core.js && node --check src/auth-otp.js && node --check src/provider-auth.js && node --check src/provider-http.js && node --check src/calendar.js && node --check src/capsules.js && node --check src/memory-features.js && node --check src/profile.js && node --check src/avatar.js && node --check src/media-upload.js && node --check src/spaces.js && node --check src/live-vlogs.js
+

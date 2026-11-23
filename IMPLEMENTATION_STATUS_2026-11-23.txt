@@ -1,0 +1,26 @@
+MOMENTO implementation stage (2026-11-23)
+
+Changed executable source:
+- LocalMomentDatabase.kt: account-scoped recovery of finalized unindexed camera clips; stable SQLite upload request IDs remain across restart.
+- CameraScreen.kt: new recordings are written to account-specific app-private directories (legacy shared files remain quarantined).
+- MomentoApp.kt: invoke recovery before initial archive listing; pass verified account ID to camera.
+- MomentUploadWorker.kt: append work requests so enqueue during an existing run is not dropped; retry transient failures without an arbitrary attempt cutoff; re-check owner and room during attachment.
+- SubscriptionsScreen.kt: replace remote VideoView with a single Media3 ExoPlayer; per-session video retrieval, chronological playlist, swipe, pause, sound, retry and release.
+- MomentoApiClient.kt: typed HTTP errors for video 401/403/404.
+- RoomMomentsScreen.kt: remove duplicate Kotlin import.
+- backend/test/media-upload.test.js: behavioral test ensuring different owners using same idempotency key do not share a moment (mocked database).
+- app/src/androidTest/.../MomentQueueRecoveryTest.kt: instrumented SQLite restart and account-isolation tests (NOT RUN).
+
+Executed: npm --prefix backend test => 98 passed, 2 skipped, 0 failed; npm --prefix backend run check => success.
+Skipped: PostgreSQL integration tests require MOMENTO_TEST_DATABASE_URL and an initialized disposable PostgreSQL database.
+Build: OpenJDK 21 present. Android SDK, Gradle distribution/cache absent. DNS for services.gradle.org unavailable. Gradle wrapper JAR exists; SHA-256 b3a875ddc1f044746e1b1a55f645584505f4a10438c1afea9f15e92a7c42ec13; official provenance not verified offline.
+No Android compilation, lint, emulator run or APK in this stage.
+
+Known incomplete / not proven:
+- Room deletion between remote attach and publish cannot be made atomic across client and server; server authorization is final authority.
+- End-to-end queue behavior across actual process death and session expiry not executed on Android.
+- Server video playback currently downloads each clip into private cache before ExoPlayer; no HTTP Range streaming.
+- Auth refresh during an already-open remote player is not automatic; user can retry after signing in again.
+- CameraX finalization and recovery must be verified on device/emulator.
+- Existing Gradle dependencies and JDK compatibility have not been resolved by Gradle.
+- Private local legacy recordings from earlier versions remain quarantined to avoid cross-account leakage.

@@ -1,0 +1,370 @@
+openapi: 3.1.0
+info:
+  title: MOMENTO API
+  version: 0.9.0
+  description: Minimal API contract for the SetVlog-inspired MOMENTO MVP.
+servers:
+  - url: https://api.momento.example/v1
+security:
+  - bearerAuth: []
+paths:
+  /me:
+    get:
+      summary: Get the authenticated user's basic profile
+      responses:
+        '200':
+          description: Current profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+  /spaces:
+    get:
+      summary: List rooms the user belongs to
+      responses:
+        '200':
+          description: User's rooms
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Space' }
+    post:
+      summary: Create a room
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSpaceRequest' }
+      responses:
+        '201':
+          description: Room created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Space' }
+        '409': { description: Duplicate request or conflicting room operation }
+  /spaces/{spaceId}:
+    get:
+      summary: Get room details; membership and age rules are checked server-side
+      parameters:
+        - $ref: '#/components/parameters/SpaceId'
+      responses:
+        '200':
+          description: Room details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Space' }
+        '403': { description: User is not allowed to view this room }
+        '404': { description: Room not found }
+  /discovery/spaces:
+    get:
+      summary: Discover public rooms; private rooms are never returned
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 120 }
+      responses:
+        '200': { description: Public room catalogue and current-user membership/request flags }
+  /spaces/{spaceId}/join:
+    post:
+      summary: Join an OPEN public room or create a pending request for an APPROVAL room
+      parameters:
+        - $ref: '#/components/parameters/SpaceId'
+      responses:
+        '200': { description: Joined, already a member, or request pending }
+        '403': { description: Age profile, block or invitation policy prevents joining }
+        '404': { description: Room unavailable }
+  /spaces/{spaceId}/join-requests:
+    get:
+      summary: List pending join requests for room moderators and administrators
+      parameters:
+        - $ref: '#/components/parameters/SpaceId'
+      responses:
+        '200': { description: Pending join requests }
+        '403': { description: Moderator permission required }
+  /spaces/{spaceId}/join-requests/{requestId}/review:
+    post:
+      summary: Approve or reject a pending request; approval rechecks age and block rules
+      parameters:
+        - $ref: '#/components/parameters/SpaceId'
+        - name: requestId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [APPROVED, REJECTED] }
+      responses:
+        '200': { description: Request reviewed }
+        '403': { description: Moderator permission or safety policy prevents approval }
+        '404': { description: Request unavailable }
+        '422': { description: Invalid decision }
+  /spaces/{spaceId}/invites:
+    post:
+      summary: Create an invitation link/code
+      parameters:
+        - $ref: '#/components/parameters/SpaceId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expiresInHours: { type: integer, minimum: 1, maximum: 720, default: 168 }
+                maxUses: { type: integer, minimum: 1, maximum: 500 }
+      responses:
+        '201':
+          description: Invite created; raw token is returned only once
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [inviteUrl, expiresAt]
+                properties:
+                  inviteUrl: { type: string, format: uri }
+                  expiresAt: { type: string, format: date-time }
+        '403': { description: User cannot invite members }
+  /invites/{token}/accept:
+    post:
+      summary: Accept an invite; server checks token, age compatibility, blocks and capacity
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string, minLength: 20, maxLength: 256 }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { description: Membership established }
+        '403': { description: Invite cannot be used by this account }
+        '410': { description: Invite expired, revoked or exhausted }
+  /spaces/{spaceId}/moments:
+    get:
+      summary: Get chronological moments visible to this member
+      parameters:
+        - $ref: '#/components/parameters/SpaceId'
+        - name: before
+          in: query
+          schema: { type: string, format: date-time }
+        - name: beforeId
+          in: query
+          description: UUID tie-breaker; required together with before for stable pagination.
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        '200':
+          description: Room timeline
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Moment' }
+                  nextCursor:
+                    oneOf:
+                      - type: object
+                        required: [before, beforeId]
+                        properties:
+                          before: { type: string, format: date-time }
+                          beforeId: { type: string, format: uuid }
+                      - type: 'null'
+        '403': { description: User is not a member or age policy blocks access }
+  /media/upload-sessions:
+    post:
+      summary: Create a private upload session for a moment file
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mimeType, byteSize, durationMs, checksumSha256]
+              properties:
+                mimeType: { type: string, enum: [video/mp4] }
+                byteSize: { type: integer, minimum: 1 }
+                durationMs: { type: integer, minimum: 1, maximum: 5000 }
+                checksumSha256: { type: string, pattern: '^[a-fA-F0-9]{64}$' }
+      responses:
+        '201':
+          description: Short-lived signed upload URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mediaId, uploadUrl, expiresAt]
+                properties:
+                  mediaId: { type: string, format: uuid }
+                  uploadUrl: { type: string, format: uri }
+                  expiresAt: { type: string, format: date-time }
+        '422': { description: Unsupported or invalid media metadata }
+  /media/{mediaId}/complete:
+    post:
+      summary: Verify uploaded object and mark media ready
+      parameters:
+        - name: mediaId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { description: Upload completed; repeated call is safe }
+        '409': { description: Object checksum or size does not match the upload session }
+        '404': { description: Upload session not found }
+  /moments:
+    post:
+      summary: Create a moment after media upload; private by default
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateMomentRequest' }
+      responses:
+        '201':
+          description: Private moment created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Moment' }
+        '403': { description: Media does not belong to user }
+        '422': { description: Duration exceeds five seconds or media is not ready }
+  /moments/{momentId}/audiences:
+    post:
+      summary: Explicitly share a private moment to one or more rooms
+      parameters:
+        - name: momentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [spaceIds]
+              properties:
+                spaceIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  uniqueItems: true
+                  items: { type: string, format: uuid }
+      responses:
+        '200': { description: Audience grants created; media object is not duplicated }
+        '403': { description: Owner or room membership/age policy check failed }
+  /moments/{momentId}/playback:
+    get:
+      summary: Check access and return a short-lived playback URL
+      parameters:
+        - name: momentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Authorized playback URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [playbackUrl, expiresAt]
+                properties:
+                  playbackUrl: { type: string, format: uri }
+                  expiresAt: { type: string, format: date-time }
+        '403': { description: No current access to this moment }
+  /moments/{momentId}:
+    delete:
+      summary: Soft-delete a moment and queue its media for retention-aware deletion
+      parameters:
+        - name: momentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Deletion accepted }
+        '403': { description: Only the owner or authorized moderator may delete }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 16, maxLength: 128 }
+    SpaceId:
+      name: spaceId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    User:
+      type: object
+      required: [id, displayName]
+      properties:
+        id: { type: string, format: uuid }
+        displayName: { type: string }
+        avatarUrl: { type: [string, 'null'], format: uri }
+    Space:
+      type: object
+      required: [id, name, kind, visibility, joinPolicy, memberCount]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        kind: { type: string, enum: [CIRCLE, INTEREST_ROOM] }
+        visibility: { type: string, enum: [PRIVATE, PUBLIC] }
+        joinPolicy: { type: string, enum: [INVITE_ONLY, OPEN, APPROVAL] }
+        memberCount: { type: integer, minimum: 1 }
+    CreateSpaceRequest:
+      type: object
+      required: [name, kind, visibility, joinPolicy]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 60 }
+        description: { type: string, maxLength: 500 }
+        kind: { type: string, enum: [CIRCLE, INTEREST_ROOM] }
+        visibility: { type: string, enum: [PRIVATE, PUBLIC] }
+        joinPolicy: { type: string, enum: [INVITE_ONLY, OPEN, APPROVAL] }
+    Moment:
+      type: object
+      required: [id, ownerId, capturedAt, durationMs, playbackUrl]
+      properties:
+        id: { type: string, format: uuid }
+        ownerId: { type: string, format: uuid }
+        capturedAt: { type: string, format: date-time }
+        durationMs: { type: integer, minimum: 1, maximum: 5000 }
+        caption: { type: [string, 'null'], maxLength: 280 }
+        playbackUrl: { type: string, format: uri }
+    CreateMomentRequest:
+      type: object
+      required: [mediaId, capturedAt, durationMs]
+      properties:
+        mediaId: { type: string, format: uuid }
+        capturedAt: { type: string, format: date-time }
+        durationMs: { type: integer, minimum: 1, maximum: 5000 }
+        caption: { type: [string, 'null'], maxLength: 280 }

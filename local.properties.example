@@ -1,0 +1,2 @@
+# Copy to local.properties only if ANDROID_HOME is not configured.
+# sdk.dir=/absolute/path/to/Android/Sdk

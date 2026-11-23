@@ -1,0 +1,152 @@
+name: Android APK build
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK and accept licenses
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager 'platforms;android-37' 'build-tools;36.0.0' 'platform-tools'
+      - name: Restore and verify official Wrapper JAR
+        run: bash scripts/restore_gradle_wrapper.sh
+      - name: Verify Wrapper distribution
+        run: ./gradlew --version
+      - name: Install backend dependencies
+        run: npm install --no-audit --no-fund --prefix backend
+      - name: Verify project
+        run: bash scripts/verify_project.sh
+      - name: Run available tests
+        run: bash scripts/run_tests.sh
+      - name: Require HTTPS API configuration before Android compilation
+        env:
+          MOMENTO_API_URL: ${{ vars.MOMENTO_API_URL }}
+        run: |
+          python3 scripts/check_api_url.py "$MOMENTO_API_URL"
+      - name: Android unit tests and lint (full log)
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew clean :app:testDebugUnitTest :app:lintDebug -PmomentoAllowOfflinePreview=true -PmomentoRequireLiveAuth=false --stacktrace --warning-mode all --no-daemon 2>&1 | tee android-tests-lint.log
+      - name: Compile debug APK for live authentication (full stacktrace)
+        shell: bash
+        env:
+          ORG_GRADLE_PROJECT_momentoApiBaseUrl: ${{ vars.MOMENTO_API_URL }}
+        run: |
+          set -o pipefail
+          ./gradlew clean assembleDebug -PmomentoRequireLiveAuth=true --stacktrace --warning-mode all --no-daemon 2>&1 | tee android-build.log
+      - name: Check APK archive and DEX
+        run: |
+          python3 - <<'PYAPK'
+          import zipfile
+          p='app/build/outputs/apk/debug/app-debug.apk'
+          with zipfile.ZipFile(p) as z:
+              assert z.testzip() is None
+              assert 'AndroidManifest.xml' in z.namelist()
+              assert any(x.startswith('classes') and x.endswith('.dex') for x in z.namelist())
+          print('APK archive and DEX: OK')
+          PYAPK
+      - name: Upload Gradle log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MOMENTO-gradle-failure-log
+          path: |
+            android-build.log
+            android-tests-lint.log
+            app/build/reports/**
+          if-no-files-found: ignore
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MOMENTO-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+  instrumented:
+    if: github.event_name == 'workflow_dispatch'
+    needs: debug
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager 'platforms;android-37' 'build-tools;36.0.0' 'platform-tools' 'system-images;android-35;google_apis;x86_64'
+      - run: bash scripts/restore_gradle_wrapper.sh
+      - name: Run instrumented tests on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          script: ./gradlew :app:connectedDebugAndroidTest --stacktrace --no-daemon
+  release:
+    if: github.event_name == 'workflow_dispatch'
+    needs: debug
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - name: Check signing availability
+        id: signing
+        run: |
+          if [[ -n "$ANDROID_KEYSTORE_BASE64" && -n "$ANDROID_KEYSTORE_PASSWORD" && -n "$ANDROID_KEY_ALIAS" && -n "$ANDROID_KEY_PASSWORD" ]]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            echo 'Release signing secrets absent; skipping release without affecting debug.'
+          fi
+      - uses: actions/checkout@v4
+        if: steps.signing.outputs.enabled == 'true'
+      - uses: actions/setup-java@v4
+        if: steps.signing.outputs.enabled == 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.signing.outputs.enabled == 'true'
+      - uses: android-actions/setup-android@v3
+        if: steps.signing.outputs.enabled == 'true'
+      - name: Build signed release
+        if: steps.signing.outputs.enabled == 'true'
+        run: |
+          sdkmanager 'platforms;android-37' 'build-tools;36.0.0' 'platform-tools'
+          bash scripts/restore_gradle_wrapper.sh
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/momento-release.jks"
+          export MOMENTO_KEYSTORE="$RUNNER_TEMP/momento-release.jks"
+          export MOMENTO_STORE_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
+          export MOMENTO_KEY_ALIAS="$ANDROID_KEY_ALIAS"
+          export MOMENTO_KEY_PASSWORD="$ANDROID_KEY_PASSWORD"
+          bash scripts/build_release_apk.sh
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
+          rm -f "$RUNNER_TEMP/momento-release.jks"
+      - uses: actions/upload-artifact@v4
+        if: steps.signing.outputs.enabled == 'true'
+        with:
+          name: MOMENTO-signed-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error

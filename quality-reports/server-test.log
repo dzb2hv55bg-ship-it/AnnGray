@@ -1,0 +1,614 @@
+
+> momento-api@0.47.0 test
+> node --test
+
+TAP version 13
+# Subtest: normalizes email and rejects malformed values
+ok 1 - normalizes email and rejects malformed values
+  ---
+  duration_ms: 0.926471
+  type: 'test'
+  ...
+# Subtest: normalizes E.164 phone and rejects ambiguous local numbers
+ok 2 - normalizes E.164 phone and rejects ambiguous local numbers
+  ---
+  duration_ms: 0.353324
+  type: 'test'
+  ...
+# Subtest: creates six-digit OTPs and verifies only the matching challenge
+ok 3 - creates six-digit OTPs and verifies only the matching challenge
+  ---
+  duration_ms: 1.606059
+  type: 'test'
+  ...
+# Subtest: refresh tokens are opaque, unique and peppered
+ok 4 - refresh tokens are opaque, unique and peppered
+  ---
+  duration_ms: 1.353287
+  type: 'test'
+  ...
+# Subtest: MOMENTO access tokens are signed, scoped and expire
+ok 5 - MOMENTO access tokens are signed, scoped and expire
+  ---
+  duration_ms: 1.23621
+  type: 'test'
+  ...
+# Subtest: refresh token shape rejects malformed untrusted values
+ok 6 - refresh token shape rejects malformed untrusted values
+  ---
+  duration_ms: 0.420216
+  type: 'test'
+  ...
+# Subtest: avatar accepts only UUID or explicit null
+ok 7 - avatar accepts only UUID or explicit null
+  ---
+  duration_ms: 1.911241
+  type: 'test'
+  ...
+# Subtest: avatar change checks ownership, readiness, duration, storage and deletion atomically
+ok 8 - avatar change checks ownership, readiness, duration, storage and deletion atomically
+  ---
+  duration_ms: 0.411422
+  type: 'test'
+  ...
+# Subtest: avatar may be cleared with null
+ok 9 - avatar may be cleared with null
+  ---
+  duration_ms: 0.36361
+  type: 'test'
+  ...
+# Subtest: unavailable asset does not leak ownership or existence
+ok 10 - unavailable asset does not leak ownership or existence
+  ---
+  duration_ms: 0.297681
+  type: 'test'
+  ...
+# Subtest: malformed avatar never queries database
+ok 11 - malformed avatar never queries database
+  ---
+  duration_ms: 0.18463
+  type: 'test'
+  ...
+# Subtest: calendar requires explicit period
+ok 12 - calendar requires explicit period
+  ---
+  duration_ms: 1.062477
+  type: 'test'
+  ...
+# Subtest: calendar week uses seven local calendar dates
+ok 13 - calendar week uses seven local calendar dates
+  ---
+  duration_ms: 0.758307
+  type: 'test'
+  ...
+# Subtest: calendar month starts on local first day
+ok 14 - calendar month starts on local first day
+  ---
+  duration_ms: 1.228558
+  type: 'test'
+  ...
+# Subtest: calendar all does not restrict start
+ok 15 - calendar all does not restrict start
+  ---
+  duration_ms: 0.213694
+  type: 'test'
+  ...
+# Subtest: calendar rejects invalid offsets
+ok 16 - calendar rejects invalid offsets
+  ---
+  duration_ms: 0.263458
+  type: 'test'
+  ...
+# Subtest: calendar query is user-scoped and parameterized
+ok 17 - calendar query is user-scoped and parameterized
+  ---
+  duration_ms: 0.445003
+  type: 'test'
+  ...
+# Subtest: valid one-year capsule
+ok 18 - valid one-year capsule
+  ---
+  duration_ms: 2.81669
+  type: 'test'
+  ...
+# Subtest: rejects early release
+ok 19 - rejects early release
+  ---
+  duration_ms: 0.265441
+  type: 'test'
+  ...
+# Subtest: rejects non-UUID identifiers
+ok 20 - rejects non-UUID identifiers
+  ---
+  duration_ms: 0.191009
+  type: 'test'
+  ...
+# Subtest: rejects timezone-free date
+ok 21 - rejects timezone-free date
+  ---
+  duration_ms: 0.154284
+  type: 'test'
+  ...
+# Subtest: rejects invalid dates
+ok 22 - rejects invalid dates
+  ---
+  duration_ms: 0.154634
+  type: 'test'
+  ...
+# Subtest: create capsule uses owner and duration filters
+ok 23 - create capsule uses owner and duration filters
+  ---
+  duration_ms: 0.569432
+  type: 'test'
+  ...
+# Subtest: duplicate or unavailable moment rejected without disclosure
+ok 24 - duplicate or unavailable moment rejected without disclosure
+  ---
+  duration_ms: 0.278321
+  type: 'test'
+  ...
+# Subtest: list only unlocks media after release and is owner-scoped
+ok 25 - list only unlocks media after release and is owner-scoped
+  ---
+  duration_ms: 0.980723
+  type: 'test'
+  ...
+# Subtest: cancel only affects an owned locked capsule
+ok 26 - cancel only affects an owned locked capsule
+  ---
+  duration_ms: 0.473146
+  type: 'test'
+  ...
+# Subtest: cancel rejects malformed identifier without querying database
+ok 27 - cancel rejects malformed identifier without querying database
+  ---
+  duration_ms: 0.51587
+  type: 'test'
+  ...
+# Subtest: cancel does not disclose non-owner or already unlocked capsules
+ok 28 - cancel does not disclose non-owner or already unlocked capsules
+  ---
+  duration_ms: 0.233423
+  type: 'test'
+  ...
+# Subtest: anonymous discovery only selects published public rooms
+ok 29 - anonymous discovery only selects published public rooms
+  ---
+  duration_ms: 1.319987
+  type: 'test'
+  ...
+# Subtest: anonymous room timeline denies non-public room
+ok 30 - anonymous room timeline denies non-public room
+  ---
+  duration_ms: 0.322027
+  type: 'test'
+  ...
+# Subtest: UUID path and ownership checks reject malformed and private public access
+ok 31 - UUID path and ownership checks reject malformed and private public access
+  ---
+  duration_ms: 1.34259
+  type: 'test'
+  ...
+# Subtest: publishing requires owned public room containing ready video
+ok 32 - publishing requires owned public room containing ready video
+  ---
+  duration_ms: 2.330505
+  type: 'test'
+  ...
+# Subtest: attach is transactional, owner-bound, idempotent and emits public update
+ok 33 - attach is transactional, owner-bound, idempotent and emits public update
+  ---
+  duration_ms: 0.474637
+  type: 'test'
+  ...
+# Subtest: private room moment cannot be attached by another account
+ok 34 - private room moment cannot be attached by another account
+  ---
+  duration_ms: 0.465194
+  type: 'test'
+  ...
+# Subtest: follow and unfollow room/author are idempotent and access-scoped
+ok 35 - follow and unfollow room/author are idempotent and access-scoped
+  ---
+  duration_ms: 0.657695
+  type: 'test'
+  ...
+# Subtest: subscriber feeds and room details scope reads to viewer and publication
+ok 36 - subscriber feeds and room details scope reads to viewer and publication
+  ---
+  duration_ms: 0.524944
+  type: 'test'
+  ...
+# Subtest: accepts bounded mp4 uploads
+ok 37 - accepts bounded mp4 uploads
+  ---
+  duration_ms: 1.73911
+  type: 'test'
+  ...
+# Subtest: rejects missing content length
+ok 38 - rejects missing content length
+  ---
+  duration_ms: 0.372143
+  type: 'test'
+  ...
+# Subtest: rejects oversized uploads
+ok 39 - rejects oversized uploads
+  ---
+  duration_ms: 0.285572
+  type: 'test'
+  ...
+# Subtest: rejects other media types
+ok 40 - rejects other media types
+  ---
+  duration_ms: 0.242307
+  type: 'test'
+  ...
+# Subtest: accepts 3.5s video
+ok 41 - accepts 3.5s video
+  ---
+  duration_ms: 0.382128
+  type: 'test'
+  ...
+# Subtest: rejects long videos
+ok 42 - rejects long videos
+  ---
+  duration_ms: 0.246894
+  type: 'test'
+  ...
+# Subtest: rejects audio-only
+ok 43 - rejects audio-only
+  ---
+  duration_ms: 0.238221
+  type: 'test'
+  ...
+# Subtest: rejects malformed video dimensions
+ok 44 - rejects malformed video dimensions
+  ---
+  duration_ms: 0.222426
+  type: 'test'
+  ...
+# Subtest: rejects unconfigured storage without writing
+ok 45 - rejects unconfigured storage without writing
+  ---
+  duration_ms: 1.482082
+  type: 'test'
+  ...
+# Subtest: rejects truncated stream
+ok 46 - rejects truncated stream
+  ---
+  duration_ms: 3.578232
+  type: 'test'
+  ...
+# Subtest: rejects uploads without a stable idempotency key
+ok 47 - rejects uploads without a stable idempotency key
+  ---
+  duration_ms: 0.282717
+  type: 'test'
+  ...
+# Subtest: rejects malformed idempotency keys
+ok 48 - rejects malformed idempotency keys
+  ---
+  duration_ms: 0.108764
+  type: 'test'
+  ...
+# Subtest: normalizes valid idempotency keys
+ok 49 - normalizes valid idempotency keys
+  ---
+  duration_ms: 0.139982
+  type: 'test'
+  ...
+# Subtest: upload retry after lost acknowledgement reuses the committed moment
+ok 50 - upload retry after lost acknowledgement reuses the committed moment
+  ---
+  duration_ms: 21.33049
+  type: 'test'
+  ...
+# Subtest: same upload request ID for two accounts never reuses the other account moment
+ok 51 - same upload request ID for two accounts never reuses the other account moment
+  ---
+  duration_ms: 3.320161
+  type: 'test'
+  ...
+# Subtest: calendar all includes all history
+ok 52 - calendar all includes all history
+  ---
+  duration_ms: 1.320287
+  type: 'test'
+  ...
+# Subtest: calendar week uses seven UTC days
+ok 53 - calendar week uses seven UTC days
+  ---
+  duration_ms: 1.85112
+  type: 'test'
+  ...
+# Subtest: calendar month uses calendar months
+ok 54 - calendar month uses calendar months
+  ---
+  duration_ms: 0.213803
+  type: 'test'
+  ...
+# Subtest: unknown period rejected
+ok 55 - unknown period rejected
+  ---
+  duration_ms: 0.460146
+  type: 'test'
+  ...
+# Subtest: video length is two to five seconds
+ok 56 - video length is two to five seconds
+  ---
+  duration_ms: 0.17197
+  type: 'test'
+  ...
+# Subtest: capsule requires at least one calendar year
+ok 57 - capsule requires at least one calendar year
+  ---
+  duration_ms: 0.274125
+  type: 'test'
+  ...
+# Subtest: film requires explicit consent and no duplicates
+ok 58 - film requires explicit consent and no duplicates
+  ---
+  duration_ms: 0.494077
+  type: 'test'
+  ...
+# Subtest: month range clamps at short months
+ok 59 - month range clamps at short months
+  ---
+  duration_ms: 0.160102
+  type: 'test'
+  ...
+# Subtest: PostgreSQL: A publishes a room, B follows, sees new moments, private room stays private
+ok 60 - PostgreSQL: A publishes a room, B follows, sees new moments, private room stays private # SKIP
+  ---
+  duration_ms: 1.268018
+  type: 'test'
+  ...
+# Subtest: PostgreSQL: lost upload response retries to the same moment and rejects changed bytes
+ok 61 - PostgreSQL: lost upload response retries to the same moment and rejects changed bytes # SKIP
+  ---
+  duration_ms: 0.297079
+  type: 'test'
+  ...
+# Subtest: accepts trimmed unicode names
+ok 62 - accepts trimmed unicode names
+  ---
+  duration_ms: 1.387939
+  type: 'test'
+  ...
+# Subtest: rejects blank names
+ok 63 - rejects blank names
+  ---
+  duration_ms: 0.38369
+  type: 'test'
+  ...
+# Subtest: rejects long names
+ok 64 - rejects long names
+  ---
+  duration_ms: 0.234995
+  type: 'test'
+  ...
+# Subtest: rejects control characters
+ok 65 - rejects control characters
+  ---
+  duration_ms: 0.283839
+  type: 'test'
+  ...
+# Subtest: rejects malformed payloads
+ok 66 - rejects malformed payloads
+  ---
+  duration_ms: 0.222467
+  type: 'test'
+  ...
+# Subtest: contact normalization and keyed hashes are deterministic but secret-scoped
+ok 67 - contact normalization and keyed hashes are deterministic but secret-scoped
+  ---
+  duration_ms: 2.595015
+  type: 'test'
+  ...
+# Subtest: contact encryption uses AES-GCM with 32-byte key and randomized IV
+ok 68 - contact encryption uses AES-GCM with 32-byte key and randomized IV
+  ---
+  duration_ms: 0.977989
+  type: 'test'
+  ...
+# Subtest: Yandex identity is resolved from server-verified OAuth userinfo, not client profile fields
+ok 69 - Yandex identity is resolved from server-verified OAuth userinfo, not client profile fields
+  ---
+  duration_ms: 0.843235
+  type: 'test'
+  ...
+# Subtest: VK identity is resolved from VK ID user_info endpoint
+ok 70 - VK identity is resolved from VK ID user_info endpoint
+  ---
+  duration_ms: 0.70096
+  type: 'test'
+  ...
+# Subtest: OTP delivery refuses insecure URLs and requires explicit provider configuration
+ok 71 - OTP delivery refuses insecure URLs and requires explicit provider configuration
+  ---
+  duration_ms: 0.874573
+  type: 'test'
+  ...
+# Subtest: OTP reservation locks the contact before checking limits and inserting
+ok 72 - OTP reservation locks the contact before checking limits and inserting
+  ---
+  duration_ms: 0.636883
+  type: 'test'
+  ...
+# Subtest: OTP reservation rolls back when the hourly limit is reached
+ok 73 - OTP reservation rolls back when the hourly limit is reached
+  ---
+  duration_ms: 0.622482
+  type: 'test'
+  ...
+# Subtest: OTP challenge purpose is strictly bound to the endpoint
+ok 74 - OTP challenge purpose is strictly bound to the endpoint
+  ---
+  duration_ms: 0.386314
+  type: 'test'
+  ...
+# Subtest: JSON request accepts an object split across chunks
+ok 75 - JSON request accepts an object split across chunks
+  ---
+  duration_ms: 1.489152
+  type: 'test'
+  ...
+# Subtest: empty JSON body defaults to an object
+ok 76 - empty JSON body defaults to an object
+  ---
+  duration_ms: 0.209657
+  type: 'test'
+  ...
+# Subtest: rejects null, arrays, strings and numbers as request bodies
+ok 77 - rejects null, arrays, strings and numbers as request bodies
+  ---
+  duration_ms: 1.136369
+  type: 'test'
+  ...
+# Subtest: rejects invalid JSON with HTTP 400
+ok 78 - rejects invalid JSON with HTTP 400
+  ---
+  duration_ms: 0.616512
+  type: 'test'
+  ...
+# Subtest: rejects oversized request before parsing with HTTP 413
+ok 79 - rejects oversized request before parsing with HTTP 413
+  ---
+  duration_ms: 0.437311
+  type: 'test'
+  ...
+# Subtest: rejects malformed UTF-8 rather than silently replacing bytes
+ok 80 - rejects malformed UTF-8 rather than silently replacing bytes
+  ---
+  duration_ms: 0.296028
+  type: 'test'
+  ...
+# Subtest: rejects non-JSON media types with HTTP 415
+ok 81 - rejects non-JSON media types with HTTP 415
+  ---
+  duration_ms: 0.431222
+  type: 'test'
+  ...
+# Subtest: accepts JSON media type with charset parameter
+ok 82 - accepts JSON media type with charset parameter
+  ---
+  duration_ms: 0.738237
+  type: 'test'
+  ...
+# Subtest: replaying room creation returns same remote room without duplicate inserts
+ok 83 - replaying room creation returns same remote room without duplicate inserts
+  ---
+  duration_ms: 1.413819
+  type: 'test'
+  ...
+# Subtest: room creation without client key remains supported
+ok 84 - room creation without client key remains supported
+  ---
+  duration_ms: 0.21129
+  type: 'test'
+  ...
+# Subtest: invite tokens have 256 bits of random material and hash deterministically
+ok 85 - invite tokens have 256 bits of random material and hash deterministically
+  ---
+  duration_ms: 2.632972
+  type: 'test'
+  ...
+# Subtest: bearer parser rejects malformed authorization headers
+ok 86 - bearer parser rejects malformed authorization headers
+  ---
+  duration_ms: 0.524433
+  type: 'test'
+  ...
+# Subtest: integer validation enforces explicit bounds
+ok 87 - integer validation enforces explicit bounds
+  ---
+  duration_ms: 0.195446
+  type: 'test'
+  ...
+# Subtest: room validation enforces name and private invite-only policy
+ok 88 - room validation enforces name and private invite-only policy
+  ---
+  duration_ms: 0.314886
+  type: 'test'
+  ...
+# Subtest: timeline cursor requires a complete timestamp and UUID pair
+ok 89 - timeline cursor requires a complete timestamp and UUID pair
+  ---
+  duration_ms: 0.693139
+  type: 'test'
+  ...
+# Subtest: OIDC identity mapping does not constrain provider subject to UUID syntax
+ok 90 - OIDC identity mapping does not constrain provider subject to UUID syntax
+  ---
+  duration_ms: 9.738052
+  type: 'test'
+  ...
+# Subtest: room validation allows public mixed-format rooms with open or approval join policy
+ok 91 - room validation allows public mixed-format rooms with open or approval join policy
+  ---
+  duration_ms: 0.386014
+  type: 'test'
+  ...
+# Subtest: private rooms cannot be configured for open joining
+ok 92 - private rooms cannot be configured for open joining
+  ---
+  duration_ms: 0.099461
+  type: 'test'
+  ...
+# Subtest: invite revocation requires owner/admin permission and commits the revoke
+ok 93 - invite revocation requires owner/admin permission and commits the revoke
+  ---
+  duration_ms: 0.669333
+  type: 'test'
+  ...
+# Subtest: invite revocation is denied to ordinary members
+ok 94 - invite revocation is denied to ordinary members
+  ---
+  duration_ms: 0.41001
+  type: 'test'
+  ...
+# Subtest: public discovery returns only public rooms and passes bounded search text as a parameter
+ok 95 - public discovery returns only public rooms and passes bounded search text as a parameter
+  ---
+  duration_ms: 0.449049
+  type: 'test'
+  ...
+# Subtest: open public room join checks age profiles before adding membership
+ok 96 - open public room join checks age profiles before adding membership
+  ---
+  duration_ms: 0.372063
+  type: 'test'
+  ...
+# Subtest: public room join fails closed when age profile is missing
+ok 97 - public room join fails closed when age profile is missing
+  ---
+  duration_ms: 0.172651
+  type: 'test'
+  ...
+# Subtest: approval room creates a pending join request instead of membership
+ok 98 - approval room creates a pending join request instead of membership
+  ---
+  duration_ms: 0.401657
+  type: 'test'
+  ...
+# Subtest: moderator approval rechecks safety and adds membership transactionally
+ok 99 - moderator approval rechecks safety and adds membership transactionally
+  ---
+  duration_ms: 2.18871
+  type: 'test'
+  ...
+# Subtest: ordinary member cannot review a join request
+ok 100 - ordinary member cannot review a join request
+  ---
+  duration_ms: 0.153061
+  type: 'test'
+  ...
+1..100
+# tests 100
+# suites 0
+# pass 98
+# fail 0
+# cancelled 0
+# skipped 2
+# todo 0
+# duration_ms 417.965983

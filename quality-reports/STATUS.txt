@@ -1,0 +1,17 @@
+MOMENTO quality run — 2026-11-23
+Executed locally:
+- scripts/run_reminder_invariants.sh: PASS, 4000 account-day cases, Kotlin CLI standalone compilation
+- npm test --prefix backend: PASS 98, SKIP 2 (MOMENTO_TEST_DATABASE_URL missing)
+- npm run check --prefix backend: PASS
+- python scripts/test_upload_queue_migration.py: PASS
+- python scripts/verify_project.py: PASS after correcting stale retry assertions
+Not executed:
+- Android Gradle compilation, lint, Android unit tests, instrumented tests: no Android SDK and no cached Gradle distribution
+- Gitleaks: no local executable; configured in GitHub Actions but not executed
+- Detekt: not configured because plugin compatibility with actual Kotlin/AGP graph is unverified
+- Paparazzi: not configured due to unverified AGP compatibility
+- LeakCanary: not installed; diagnostic builds not verified
+- MobSF: not run, requires compiled APK and scanning environment
+- Emulator: unavailable
+- PostgreSQL: unavailable, 2 integration tests skipped
+Note: project versions in TOML are not evidence of resolvable dependencies.

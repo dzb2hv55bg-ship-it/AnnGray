@@ -1,0 +1,7 @@
+# MOMENTO 0.28.0 — first authenticated video ingestion
+
+Implemented `POST /v1/me/moments/upload` with bearer session authentication, `Content-Type: video/mp4`, mandatory `Content-Length` (max 25 MiB), and `X-Momento-Captured-At` ISO timestamp. It accepts raw MP4 bytes, checks actual container/codec/duration/dimensions using locally installed `ffprobe`, stores the file under a random UUID filename in `MOMENTO_MEDIA_DIR`, then inserts a private moment and media asset in a PostgreSQL transaction. On DB failure the file is removed. Validated videos must be 2–5 seconds. No photo upload endpoint.
+
+Requirements: install ffprobe/FFmpeg on backend host; configure secure persistent `MOMENTO_MEDIA_DIR` outside publicly served folders, HTTPS reverse proxy with body limit <=25 MiB and rate limiting, PostgreSQL migrations and backup. The upload API is not a signed-cloud-storage implementation. Raw video is buffered in memory up to 25 MiB per request, so production requires concurrency limits and ideally streaming/object-storage multipart upload. Uploaded content is not transcoded, virus scanned, or moderated; **READY is only technical readiness**. Before public launch, add media moderation, encrypted object storage, retention, privacy-compliant playback authorization, and E2E tests. No Android UI or actual device upload was compiled/tested here.
+
+Verification: 83/83 Node tests passed; `npm run check` passed; `scripts/verify_project.py` passed. Database integration and Android compilation not executed.
