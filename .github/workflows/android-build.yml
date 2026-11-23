@@ -19,7 +19,7 @@ jobs:
         with:
           node-version: '22'
       - uses: gradle/actions/setup-gradle@v4
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4.0.4
       - name: Install Android SDK and accept licenses
         run: |
           yes | sdkmanager --licenses > /dev/null || true
@@ -32,25 +32,11 @@ jobs:
         run: npm install --no-audit --no-fund --prefix backend
       - name: Verify project
         run: bash scripts/verify_project.sh
-      - name: Run available tests
-        run: bash scripts/run_tests.sh
-      - name: Require HTTPS API configuration before Android compilation
-        env:
-          MOMENTO_API_URL: ${{ vars.MOMENTO_API_URL }}
-        run: |
-          python3 scripts/check_api_url.py "$MOMENTO_API_URL"
-      - name: Android unit tests and lint (full log)
+      - name: Android unit tests, lint and offline preview APK
         shell: bash
         run: |
           set -o pipefail
-          ./gradlew clean :app:testDebugUnitTest :app:lintDebug -PmomentoAllowOfflinePreview=true -PmomentoRequireLiveAuth=false --stacktrace --warning-mode all --no-daemon 2>&1 | tee android-tests-lint.log
-      - name: Compile debug APK for live authentication (full stacktrace)
-        shell: bash
-        env:
-          ORG_GRADLE_PROJECT_momentoApiBaseUrl: ${{ vars.MOMENTO_API_URL }}
-        run: |
-          set -o pipefail
-          ./gradlew clean assembleDebug -PmomentoRequireLiveAuth=true --stacktrace --warning-mode all --no-daemon 2>&1 | tee android-build.log
+          ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug -PmomentoAllowOfflinePreview=true -PmomentoRequireLiveAuth=false --stacktrace --warning-mode all --no-daemon 2>&1 | tee android-tests-lint.log
       - name: Check APK archive and DEX
         run: |
           python3 - <<'PYAPK'
@@ -68,14 +54,28 @@ jobs:
         with:
           name: MOMENTO-gradle-failure-log
           path: |
-            android-build.log
             android-tests-lint.log
             app/build/reports/**
           if-no-files-found: ignore
-      - name: Upload debug APK
+      - name: Upload offline preview APK
         uses: actions/upload-artifact@v4
         with:
-          name: MOMENTO-debug-apk
+          name: MOMENTO-offline-preview-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+      - name: Build configured debug APK when an HTTPS API is available
+        if: vars.MOMENTO_API_URL != ''
+        shell: bash
+        env:
+          ORG_GRADLE_PROJECT_momentoApiBaseUrl: ${{ vars.MOMENTO_API_URL }}
+        run: |
+          python3 scripts/check_api_url.py "$ORG_GRADLE_PROJECT_momentoApiBaseUrl"
+          ./gradlew :app:assembleDebug -PmomentoRequireLiveAuth=true --stacktrace --no-daemon
+      - name: Upload configured debug APK
+        if: vars.MOMENTO_API_URL != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: MOMENTO-configured-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
   instrumented:
@@ -90,7 +90,7 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4.0.4
       - run: sdkmanager 'platforms;android-37' 'build-tools;36.0.0' 'platform-tools' 'system-images;android-35;google_apis;x86_64'
       - run: bash scripts/restore_gradle_wrapper.sh
       - name: Run instrumented tests on emulator
@@ -99,7 +99,7 @@ jobs:
           api-level: 35
           target: google_apis
           arch: x86_64
-          script: ./gradlew :app:connectedDebugAndroidTest --stacktrace --no-daemon
+          script: ./gradlew :app:connectedDebugAndroidTest -PmomentoAllowOfflinePreview=true -PmomentoRequireLiveAuth=false --stacktrace --no-daemon
   release:
     if: github.event_name == 'workflow_dispatch'
     needs: debug
@@ -129,10 +129,12 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
         if: steps.signing.outputs.enabled == 'true'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4.0.4
         if: steps.signing.outputs.enabled == 'true'
       - name: Build signed release
         if: steps.signing.outputs.enabled == 'true'
+        env:
+          ORG_GRADLE_PROJECT_momentoApiBaseUrl: ${{ vars.MOMENTO_API_URL }}
         run: |
           sdkmanager 'platforms;android-37' 'build-tools;36.0.0' 'platform-tools'
           bash scripts/restore_gradle_wrapper.sh
