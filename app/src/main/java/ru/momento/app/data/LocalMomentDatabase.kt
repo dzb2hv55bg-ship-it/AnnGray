@@ -202,22 +202,29 @@ class LocalMomentDatabase(context: Context, private val accountId: String) : SQL
     /** Enqueue once: every subsequent attempt must reuse the same UUID. */
     @Synchronized
     fun queueUpload(momentId: String): String {
-        val existing = readableDatabase.query(
-            "moments", arrayOf("upload_request_id", "upload_state"), "id = ?", arrayOf(momentId), null, null, null
-        ).use { cursor ->
-            if (!cursor.moveToFirst()) throw IllegalArgumentException("Unknown moment")
-            val requestId = if (cursor.isNull(0)) null else cursor.getString(0)
-            val state = cursor.getString(1)
-            require(state != UPLOAD_UPLOADED_PRIVATE) { "Moment already uploaded" }
-            requestId
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val existing = db.query(
+                "moments", arrayOf("upload_request_id", "upload_state"), "id = ?", arrayOf(momentId), null, null, null
+            ).use { cursor ->
+                if (!cursor.moveToFirst()) throw IllegalArgumentException("Unknown moment")
+                val requestId = if (cursor.isNull(0)) null else cursor.getString(0)
+                val state = cursor.getString(1)
+                require(state != UPLOAD_UPLOADED_PRIVATE) { "Moment already uploaded" }
+                requestId
+            }
+            val stableId = existing ?: UUID.randomUUID().toString()
+            val updated = db.update("moments", ContentValues().apply {
+                put("upload_request_id", stableId)
+                put("upload_state", UPLOAD_QUEUED)
+            }, "id = ? AND upload_state != ?", arrayOf(momentId, UPLOAD_UPLOADED_PRIVATE))
+            check(updated == 1) { "Moment cannot be queued" }
+            db.setTransactionSuccessful()
+            return stableId
+        } finally {
+            db.endTransaction()
         }
-        val stableId = existing ?: UUID.randomUUID().toString()
-        val updated = writableDatabase.update("moments", ContentValues().apply {
-            put("upload_request_id", stableId)
-            put("upload_state", UPLOAD_QUEUED)
-        }, "id = ? AND upload_state != ?", arrayOf(momentId, UPLOAD_UPLOADED_PRIVATE))
-        check(updated == 1) { "Moment cannot be queued" }
-        return stableId
     }
 
     /** On success, store server identity and state in a single durable SQLite write. */

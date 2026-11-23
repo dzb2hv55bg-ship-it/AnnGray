@@ -3,7 +3,6 @@ package ru.momento.app.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.runtime.DisposableEffect
 import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -21,8 +20,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 import ru.momento.app.network.MomentoApiClient
 import ru.momento.app.network.RemoteSpace
 import ru.momento.app.network.RemoteMoment
@@ -58,6 +57,7 @@ fun SubscriptionsScreen(accessToken: String, api: MomentoApiClient, onOpenRoom: 
             }
             discovered = api.discoverSpaces(accessToken, search)
         } catch (exception: Exception) {
+            if (exception is CancellationException) throw exception
             error = exception.message ?: "Не удалось подключиться к серверу"
         } finally { loading = false }
     }
@@ -135,6 +135,7 @@ fun PublicRoomScreen(accessToken: String, roomId: String, api: MomentoApiClient,
     var paused by remember(roomId) { mutableStateOf(false) }
     var muted by remember(roomId) { mutableStateOf(false) }
     var videoRetry by remember(roomId) { mutableIntStateOf(0) }
+    var videoError by remember(roomId) { mutableStateOf<String?>(null) }
     val player = remember(context, roomId) { ExoPlayer.Builder(context).build() }
     DisposableEffect(player) {
         val listener = object : Player.Listener {
@@ -159,7 +160,6 @@ fun PublicRoomScreen(accessToken: String, roomId: String, api: MomentoApiClient,
         player.volume = if (muted) 0f else 1f
     }
 
-    var videoError by remember(roomId) { mutableStateOf<String?>(null) }
     LaunchedEffect(roomId, currentIndex, moments, accessToken, videoRetry) {
         player.stop(); player.clearMediaItems()
         cachedVideo = null
@@ -179,15 +179,22 @@ fun PublicRoomScreen(accessToken: String, roomId: String, api: MomentoApiClient,
             player.playWhenReady = !paused
         }
         catch (e: Exception) {
+            if (e is CancellationException) throw e
             videoError = if (e is MomentoApiException && e.statusCode == 401) "Сессия истекла. Войди снова"
                 else e.message ?: "Не удалось получить видео"
         }
     }
-    LaunchedEffect(roomId, retry) {
+    LaunchedEffect(roomId, accessToken, retry) {
         loading = true
         error = null
-        try { moments = api.getSpaceTimeline(accessToken, roomId).items.reversed() }
-        catch (e: Exception) { error = e.message ?: "Ошибка загрузки комнаты" }
+        try {
+            val latest = api.getSpaceTimeline(accessToken, roomId).items.reversed()
+            currentIndex = currentIndex.coerceAtMost(latest.lastIndex.coerceAtLeast(0))
+            moments = latest
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            error = e.message ?: "Ошибка загрузки комнаты"
+        }
         finally { loading = false }
     }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
