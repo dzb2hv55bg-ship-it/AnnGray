@@ -15,7 +15,7 @@ camera = (ROOT / "app/src/main/java/ru/momento/app/ui/CameraScreen.kt").read_tex
 database = (ROOT / "app/src/main/java/ru/momento/app/data/LocalMomentDatabase.kt").read_text()
 spaces = (ROOT / "app/src/main/java/ru/momento/app/data/LocalSpaceDatabase.kt").read_text()
 ui = (ROOT / "app/src/main/java/ru/momento/app/ui/MomentoApp.kt").read_text()
-assert "duration in 2_000L..5_000L" in camera
+assert "LocalMomentDatabase.readCaptureDuration(output)" in camera
 assert "durationMillis in MIN_DURATION_MS..MAX_DURATION_MS" in database
 assert "CREATE TABLE moments" in database
 assert "CREATE TABLE spaces" in spaces

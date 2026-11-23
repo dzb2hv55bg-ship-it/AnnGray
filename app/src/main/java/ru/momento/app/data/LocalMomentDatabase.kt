@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import android.media.MediaMetadataRetriever
 import java.io.File
 import java.util.UUID
 import java.security.MessageDigest
@@ -128,13 +129,8 @@ class LocalMomentDatabase(context: Context, private val accountId: String) : SQL
         var recovered = 0
         directory.listFiles()?.filter { it.isFile && it.name.matches(Regex("moment_[0-9]{8}_[0-9]{6}_[0-9]{3}\\.mp4")) && it.absolutePath !in indexed }
             ?.forEach { file ->
-                if (file.length() == 0L) return@forEach
-                val retriever = android.media.MediaMetadataRetriever()
-                val duration = try {
-                    retriever.setDataSource(file.absolutePath)
-                    retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
-                } catch (_: Exception) { null } finally { runCatching { retriever.release() } }
-                if (duration != null && duration in MIN_DURATION_MS..MAX_DURATION_MS) {
+                val duration = readCaptureDuration(file)
+                if (duration != null) {
                     // Never remove the file if indexing fails; it can be retried on next launch.
                     if (runCatching { insertMoment(file, duration, file.lastModified()) }.isSuccess) recovered++
                 }
@@ -260,6 +256,21 @@ class LocalMomentDatabase(context: Context, private val accountId: String) : SQL
     companion object {
         const val MIN_DURATION_MS = 2_000L
         const val MAX_DURATION_MS = 5_000L
+        fun readCaptureDuration(file: File): Long? {
+            if (!file.isFile || file.length() == 0L) return null
+            val retriever = MediaMetadataRetriever()
+            return try {
+                retriever.setDataSource(file.absolutePath)
+                val hasVideo = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) == "yes"
+                val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+                duration?.takeIf { hasVideo && it in MIN_DURATION_MS..MAX_DURATION_MS }
+            } catch (_: RuntimeException) {
+                null
+            } finally {
+                runCatching { retriever.release() }
+            }
+        }
+
         const val UPLOAD_LOCAL_ONLY = "LOCAL_ONLY"
         const val UPLOAD_QUEUED = "QUEUED"
         const val UPLOAD_UPLOADING = "UPLOADING"

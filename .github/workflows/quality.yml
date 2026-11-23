@@ -46,6 +46,7 @@ jobs:
       - run: npm run check
         working-directory: backend
       - run: python3 scripts/test_upload_queue_migration.py
+      - run: python3 scripts/test_live_moments_policy.py
       - run: python3 scripts/verify_project.py
       - run: python3 scripts/check_reference_integrity.py
 

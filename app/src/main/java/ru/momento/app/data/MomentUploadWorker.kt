@@ -36,7 +36,7 @@ class MomentUploadWorker(context: Context, params: WorkerParameters) : Coroutine
                     MomentoSessionRefresh.refreshForOwner(vault, expectedOwner)
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
-                    return@withContext if (e is MomentoApiException && e.statusCode in 400..499 && e.statusCode !in listOf(401,408,429)) Result.failure() else Result.retry()
+                    return@withContext if (e is MomentoApiException && e.statusCode in 400..499 && e.statusCode !in listOf(408, 429)) Result.failure() else Result.retry()
                 } ?: return@withContext Result.failure()
                 if (vault.readVerifiedAccountId() != expectedOwner ||
                     vault.read()?.accessToken != activeSession.accessToken) return@withContext Result.failure()
@@ -87,9 +87,15 @@ class MomentUploadWorker(context: Context, params: WorkerParameters) : Coroutine
                     retryNeeded = true
                     continue
                 }
+                val token = try {
+                    MomentoSessionRefresh.refreshForOwner(vault, expectedOwner)?.accessToken
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    val permanent = e is MomentoApiException && e.statusCode in 400..499 &&
+                        e.statusCode !in listOf(408, 429)
+                    return@withContext if (permanent) Result.failure() else Result.retry()
+                } ?: return@withContext Result.failure()
                 try {
-                    val token = MomentoSessionRefresh.refreshForOwner(vault, expectedOwner)?.accessToken
-                        ?: return@withContext Result.failure()
                     val remoteRoom = room.remoteId ?: client.createSyncedRoom(
                         token, room.id, room.name, room.description, "PUBLIC"
                     ).also { remoteId ->

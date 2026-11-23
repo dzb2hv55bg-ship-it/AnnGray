@@ -57,12 +57,13 @@ fun RoomMomentsScreen(
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(links, key = { it.momentId }) { link ->
                 val moment = moments.firstOrNull { it.id == link.momentId }
-                if (moment != null) Card(shape = RoundedCornerShape(20.dp)) {
+                Card(shape = RoundedCornerShape(20.dp)) {
                     Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                        Text("Момент ${link.position + 1} · ${moment.durationMillis / 1000.0} сек")
+                        if (moment == null) Text("Видео отсутствует на устройстве")
+                        else Text("Момент ${link.position + 1} · ${moment.durationMillis / 1000.0} сек")
                         Text(link.series, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            TextButton(onClick = { onSeries(link.momentId, nextSeries(link.series)) }) { Text("Серия +") }
+                            TextButton(onClick = { onSeries(link.momentId, nextSeries(link.series)) }, enabled = moment != null) { Text("Серия +") }
                             TextButton(onClick = { onRemove(link.momentId) }, enabled = !room.publicationRequested) { Text("Убрать") }
                         }
                     }

@@ -2,7 +2,7 @@ package ru.momento.app.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.media.MediaMetadataRetriever
+import ru.momento.app.data.LocalMomentDatabase
 import android.os.SystemClock
 import android.os.StatFs
 import kotlinx.coroutines.delay
@@ -201,7 +201,7 @@ fun CameraScreen(
                 onClick = {
                     if (isBusy) return@Button
                     val capture = videoCapture ?: return@Button
-                    val directory = File(context.filesDir, "moments_${ru.momento.app.data.LocalMomentDatabase.databaseNameForAccount(verifiedOwnerId).removeSuffix(".db")}").apply { mkdirs() }
+                    val directory = File(context.filesDir, "moments_${LocalMomentDatabase.databaseNameForAccount(verifiedOwnerId).removeSuffix(".db")}").apply { mkdirs() }
                     if (!directory.isDirectory || StatFs(directory.absolutePath).availableBytes < 30L * 1024 * 1024) {
                         errorMessage = "Недостаточно места для записи момента."
                         return@Button
@@ -227,22 +227,14 @@ fun CameraScreen(
                                     output.delete()
                                     errorMessage = "Запись отменена"
                                 } else if (!event.hasError() && output.exists() && output.length() > 0L) {
-                                    val retriever = MediaMetadataRetriever()
-                                    val duration = try {
-                                        retriever.setDataSource(output.absolutePath)
-                                        retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
-                                    } catch (_: Exception) {
-                                        null
-                                    } finally {
-                                        try { retriever.release() } catch (_: Exception) { }
-                                    }
-                                    if (duration != null && duration in 2_000L..5_000L) {
+                                    val duration = LocalMomentDatabase.readCaptureDuration(output)
+                                    if (duration != null) {
                                         // Keep the only successful file until the caller has indexed it.
                                         try { onSaved(output, duration) }
                                         catch (e: Exception) { errorMessage = "Момент сохранён на устройстве, но не добавлен в очередь. Файл сохранён: ${output.name}" }
                                     } else {
                                         output.delete()
-                                        errorMessage = "Видео не прошло проверку длительности. Попробуй записать ещё раз."
+                                        errorMessage = "Не удалось прочитать видео или его длительность вне диапазона 2–5 секунд. Попробуй записать ещё раз."
                                     }
                                 } else {
                                     output.delete()
