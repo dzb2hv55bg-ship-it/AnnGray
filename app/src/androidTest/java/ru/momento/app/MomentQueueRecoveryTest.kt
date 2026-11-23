@@ -40,6 +40,18 @@ class MomentQueueRecoveryTest {
         } finally { file.delete(); context.deleteDatabase(LocalMomentDatabase.databaseNameForAccount(owner)) }
     }
 
+    @Test fun corruptRecordingIsNotRecoveredAsVideo() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val file = File.createTempFile("corrupt-capture-", ".mp4", context.cacheDir)
+        try {
+            file.writeBytes(byteArrayOf(1, 2, 3))
+            assertNull(LocalMomentDatabase.readCaptureDuration(file))
+            assertTrue(file.exists())
+        } finally {
+            file.delete()
+        }
+    }
+
     @Test fun permanentFailureRequiresExplicitRetry() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val owner = UUID.randomUUID().toString()

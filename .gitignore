@@ -10,3 +10,4 @@
 .env
 
 /backend/node_modules/
+/.kotlin/
