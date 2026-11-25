@@ -272,6 +272,7 @@ class LocalMomentDatabase(context: Context, private val accountId: String) : SQL
     }
 
     companion object {
+        const val LOCAL_PREVIEW_OWNER = "momento-local-preview"
         const val MIN_DURATION_MS = 2_000L
         const val MAX_DURATION_MS = 5_000L
         const val UPLOAD_LOCAL_ONLY = "LOCAL_ONLY"
@@ -282,6 +283,7 @@ class LocalMomentDatabase(context: Context, private val accountId: String) : SQL
         // Do not open the legacy global database: its records have no reliable owner.
         // Those files remain on disk for a future explicit recovery/migration flow.
         fun databaseNameForAccount(accountId: String): String {
+            if (accountId == LOCAL_PREVIEW_OWNER) return "momento_preview.db"
             require(UUID.fromString(accountId).toString().equals(accountId, ignoreCase = true)) {
                 "Account identity must be a UUID"
             }

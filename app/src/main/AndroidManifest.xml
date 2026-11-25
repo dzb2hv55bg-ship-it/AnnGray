@@ -7,7 +7,7 @@
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <application android:name=".MomentoApplication"
         android:allowBackup="false"
-        android:label="MOMENTO"
+        android:label="${momentoAppLabel}"
         android:supportsRtl="true"
         android:theme="@style/Theme.Momento">
         <activity

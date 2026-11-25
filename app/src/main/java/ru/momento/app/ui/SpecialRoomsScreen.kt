@@ -31,7 +31,8 @@ private fun eventDate(time: Long): String =
 @Composable
 internal fun SpecialRoomsScreen(
     token: String, accountId: String, api: MomentoApiClient,
-    onRecord: (String, String) -> Unit, onBack: () -> Unit
+    onRecord: (String, String) -> Unit, onBack: () -> Unit,
+    previewOnly: Boolean = false
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -98,7 +99,7 @@ internal fun SpecialRoomsScreen(
     }
 
     LaunchedEffect(token, roomId, refresh, playing, film) {
-        if (playing || film) return@LaunchedEffect
+        if (previewOnly || playing || film) return@LaunchedEffect
         do {
             try {
                 val id = roomId
@@ -152,7 +153,10 @@ internal fun SpecialRoomsScreen(
                 var openEvent by rememberSaveable { mutableStateOf(false) }
                 val requestId = rememberSaveable { UUID.randomUUID().toString() }
                 val event = type == "EVENT"
-                MomentoScreenHeading(if (event) "Комната события" else "Секретная комната", "Доступ по приглашению")
+                MomentoScreenHeading(if (event) "Комната события" else "Секретная комната")
+                Text(if (event) "Приглашённые участники соберут свои моменты в общую хронологию."
+                    else "Комната для двух участников. Чтобы добавить второго, отправь одноразовое приглашение.")
+                if (previewOnly) Text("Можно заполнить форму. Для создания комнаты потребуется вход и подключение к серверу.")
                 OutlinedTextField(name, { name = it }, label = { Text("Название") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(description, { description = it }, label = { Text("Описание") }, modifier = Modifier.fillMaxWidth())
                 if (event) {
@@ -160,10 +164,13 @@ internal fun SpecialRoomsScreen(
                     OutlinedTextField(ends, { ends = it }, label = { Text("Завершение с часовым поясом") }, singleLine = true)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Switch(checked = openEvent, onCheckedChange = { openEvent = it })
-                        Text("Разрешить публичную публикацию события")
+                        Column {
+                            Text("Разрешить публичную публикацию")
+                            Text("После публикации историю смогут посмотреть все.", style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
-                MomentoPrimaryAction("Создать", enabled = !busy && name.trim().length in 2..60 && description.length <= 500, onClick = {
+                MomentoPrimaryAction("Создать", enabled = !previewOnly && !busy && name.trim().length in 2..60 && description.length <= 500, onClick = {
                     submit {
                         roomId = api.createSpecialRoom(token, requestId, type, name, description,
                             starts.takeIf { event }, ends.takeIf { event }, event && openEvent).id
@@ -250,14 +257,20 @@ internal fun SpecialRoomsScreen(
                 item {
                     var code by rememberSaveable { mutableStateOf("") }
                     MomentoScreenHeading("События и секретные комнаты", "Совместная история из коротких видео")
-                    MomentoPrimaryAction("Создать комнату события", enabled = !busy, onClick = { kind = "EVENT" })
-                    TextButton(onClick = { kind = "SECRET" }, enabled = !busy) { Text("Создать секретную комнату") }
-                    OutlinedTextField(code, { code = it }, label = { Text("Ссылка или код приглашения") },
-                        singleLine = true, modifier = Modifier.fillMaxWidth())
-                    TextButton(enabled = code.isNotBlank() && !busy, onClick = {
-                        submit { roomId = api.acceptInvite(token, code.trim().trimEnd('/').substringAfterLast('/')) }
-                    }) { Text("Присоединиться") }
-                    TextButton(onClick = { refresh++ }) { Text("Обновить список") }
+                    if (previewOnly) Text("Здесь можно осмотреть формы. Совместная история и приглашения доступны после входа.")
+                    MomentoPrimaryAction(if (previewOnly) "Посмотреть комнату события" else "Создать комнату события",
+                        enabled = !busy, onClick = { kind = "EVENT" })
+                    TextButton(onClick = { kind = "SECRET" }, enabled = !busy) {
+                        Text(if (previewOnly) "Посмотреть секретную комнату" else "Создать секретную комнату")
+                    }
+                    if (!previewOnly) {
+                        OutlinedTextField(code, { code = it }, label = { Text("Ссылка или код приглашения") },
+                            singleLine = true, modifier = Modifier.fillMaxWidth())
+                        TextButton(enabled = code.isNotBlank() && !busy, onClick = {
+                            submit { roomId = api.acceptInvite(token, code.trim().trimEnd('/').substringAfterLast('/')) }
+                        }) { Text("Присоединиться") }
+                        TextButton(onClick = { refresh++ }) { Text("Обновить список") }
+                    }
                 }
                 items(rooms, key = { it.id }) { room ->
                     OutlinedButton(onClick = { roomId = room.id; error = null }, modifier = Modifier.fillMaxWidth()) {

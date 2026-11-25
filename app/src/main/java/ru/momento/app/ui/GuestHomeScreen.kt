@@ -25,7 +25,7 @@ import ru.momento.app.network.RemoteSpace
 
 /** Guest is a UI state, never an implicit account or a substitute for an access token. */
 @Composable
-fun GuestHomeScreen(onPublish: () -> Unit, onSignIn: () -> Unit, onLeave: () -> Unit) {
+fun GuestHomeScreen(onLocalPreview: () -> Unit, onPublish: () -> Unit, onSignIn: () -> Unit, onLeave: () -> Unit) {
     var rooms by remember { mutableStateOf<List<RemoteSpace>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var unavailable by remember { mutableStateOf(!BuildConfig.MOMENTO_API_CONFIGURED) }
@@ -73,7 +73,8 @@ fun GuestHomeScreen(onPublish: () -> Unit, onSignIn: () -> Unit, onLeave: () -> 
                     MomentoSectionTitle("Жизнь в моментах", "Твои настоящие 2–5 секунд")
                     Text("Снимай короткие видео здесь и сейчас — 2–5 секунд.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    MomentoPrimaryAction("Войти, чтобы записать момент", onPublish)
+                    MomentoPrimaryAction("Попробовать без аккаунта", onLocalPreview)
+                    TextButton(onClick = onPublish) { Text("Войти для публикации") }
                     Text("Публичные влоги", style = MaterialTheme.typography.titleLarge)
                     PublicRooms(rooms, loading, unavailable, { retry++ }, { openedRoom = it }, searchQuery.isNotBlank())
                 }
@@ -96,9 +97,10 @@ fun GuestHomeScreen(onPublish: () -> Unit, onSignIn: () -> Unit, onLeave: () -> 
                 }
                 else -> {
                     MomentoSectionTitle("Гостевой профиль")
-                    Text("Ты смотришь MOMENTO без регистрации. Аккаунт понадобится для публикации и подписок.",
+                    Text("В гостевом режиме доступны публичные комнаты при подключении к серверу. Камеру и личный архив можно попробовать в локальном режиме.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Button(onClick = onSignIn, modifier = Modifier.fillMaxWidth()) { Text("Войти в аккаунт") }
+                    OutlinedButton(onClick = onLocalPreview, modifier = Modifier.fillMaxWidth()) { Text("Попробовать без аккаунта") }
                     OutlinedButton(onClick = onLeave, modifier = Modifier.fillMaxWidth()) { Text("Вернуться ко входу") }
                 }
             }
@@ -118,7 +120,8 @@ private fun ColumnScope.PublicRooms(
             if (BuildConfig.MOMENTO_API_CONFIGURED)
                 "Не удалось связаться с сервером. Проверь интернет и попробуй ещё раз."
             else "Сервер MOMENTO пока не подключён к этой сборке. Гостевой интерфейс доступен офлайн.",
-            "Повторить", onRetry, isError = BuildConfig.MOMENTO_API_CONFIGURED
+            if (BuildConfig.MOMENTO_API_CONFIGURED) "Повторить" else null,
+            onRetry.takeIf { BuildConfig.MOMENTO_API_CONFIGURED }, isError = BuildConfig.MOMENTO_API_CONFIGURED
         )
     } else if (!loading && rooms.isEmpty()) {
         MomentoStatePanel(

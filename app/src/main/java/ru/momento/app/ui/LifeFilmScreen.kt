@@ -234,7 +234,13 @@ private fun FilmScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item { TextButton(onClick = onBack, enabled = !busy) { Text("Назад") } }
-        item { MomentoScreenHeading(title, if (download == null) "Фильм из твоих моментов" else "Общая история") }
+        item {
+            MomentoScreenHeading(title, if (download == null) "Фильм из твоих моментов" else "Общая история")
+            if (download == null && clips.isNotEmpty()) {
+                Text("Фильм собирается по порядку записи. Исходные моменты останутся в архиве.",
+                    style = MaterialTheme.typography.bodyMedium)
+            }
+        }
         cover?.let { bitmap ->
             item { Image(bitmap.asImageBitmap(), "Кадр первого момента", Modifier.fillMaxWidth().height(180.dp)) }
         }
@@ -278,7 +284,9 @@ private fun FilmScreen(
                         progress = null
                     }) { Text("Отменить") }
                 }
-                clips.isEmpty() -> Text("За этот период в архиве нет моментов.")
+                clips.isEmpty() -> Text(if (sources.isEmpty() && download == null)
+                    "Сначала запиши момент в камере. Затем вернись сюда, чтобы собрать фильм."
+                else "За этот период в архиве нет моментов.")
                 else -> Button(enabled = !busy, onClick = {
                     error = null
                     output?.delete()

@@ -139,11 +139,17 @@ fun MomentoApp() {
             delay(15_000L)
         }
     }
+    var localPreview by rememberSaveable { mutableStateOf(false) }
+    if (authSession == null && localPreview) {
+        LocalPreviewScreen { localPreview = false }
+        return
+    }
     var guestMode by rememberSaveable { mutableStateOf(false) }
     var guestPublishing by rememberSaveable { mutableStateOf(false) }
     var guestLoginOnly by rememberSaveable { mutableStateOf(false) }
     if (authSession == null && guestMode && !guestPublishing) {
         GuestHomeScreen(
+            onLocalPreview = { localPreview = true },
             onPublish = { guestPublishing = true; guestLoginOnly = false },
             onSignIn = { guestPublishing = true; guestLoginOnly = true },
             onLeave = { guestMode = false }
@@ -159,7 +165,8 @@ fun MomentoApp() {
         }
         AuthScreen(vault = sessionVault,
             onAuthenticated = { authSession = it; if (guestPublishing && !guestLoginOnly) selectedTab = Tab.CREATE; guestPublishing = false; guestMode = false },
-            onGuest = { guestMode = true; guestPublishing = false })
+            onGuest = { guestMode = true; guestPublishing = false },
+            onLocalPreview = { localPreview = true })
         return
     }
     // Fail closed until /auth/me verifies which account owns the local archive.
@@ -579,16 +586,21 @@ private fun HomeScreen(
 }
 
 @Composable
-private fun ArchiveScreen(
+internal fun ArchiveScreen(
     padding: PaddingValues,
     moments: List<LocalMoment>,
     uploadingMomentId: String?,
-    onUpload: (LocalMoment) -> Unit
+    onRecord: (() -> Unit)? = null,
+    onUpload: ((LocalMoment) -> Unit)? = null
 ) {
     if (moments.isEmpty()) {
-        SimpleScreen(padding, "Мой архив", "Здесь будут храниться твои моменты по датам. Запиши первый момент — он появится здесь.")
+        Column(Modifier.fillMaxSize().padding(padding).padding(MomentoTokens.screenPadding)) {
+            MomentoStatePanel("Мой архив", "Запиши видео на 2–5 секунд. Первый момент появится здесь.",
+                if (onRecord != null) "Открыть камеру" else null, onRecord)
+        }
         return
     }
+    var playingId by remember(moments.isEmpty()) { mutableStateOf<String?>(null) }
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(padding),
         contentPadding = PaddingValues(16.dp),
@@ -605,17 +617,31 @@ private fun ArchiveScreen(
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(Modifier.height(8.dp))
-                    AndroidView(
-                        factory = { context -> VideoView(context).apply {
-                            setVideoURI(Uri.fromFile(file))
-                            setOnPreparedListener { player -> player.isLooping = true; start() }
-                        } },
-                        modifier = Modifier.fillMaxWidth().height(220.dp)
-                    )
+                    if (playingId == moment.id && file.isFile) {
+                        androidx.compose.runtime.key(moment.id) {
+                            AndroidView(
+                                factory = { context -> VideoView(context).apply {
+                                    setVideoURI(Uri.fromFile(file))
+                                    setMediaController(android.widget.MediaController(context))
+                                    start()
+                                } },
+                                onReset = null,
+                                onRelease = { it.stopPlayback() },
+                                modifier = Modifier.fillMaxWidth().height(220.dp)
+                            )
+                        }
+                        TextButton(onClick = { playingId = null }) { Text("Закрыть видео") }
+                    } else if (file.isFile) {
+                        TextButton(onClick = { playingId = moment.id }) { Text("Смотреть момент") }
+                    } else {
+                        Text("Файл момента отсутствует на устройстве.", color = MaterialTheme.colorScheme.error)
+                    }
                     Spacer(Modifier.height(6.dp))
                     Text("Личный архив · ${moment.durationMillis / 1000.0} с · ${moment.byteSize / 1024} КБ", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(8.dp))
-                    if (moment.uploadState == LocalMomentDatabase.UPLOAD_UPLOADED_PRIVATE) {
+                    if (onUpload == null) {
+                        Text("Хранится на этом устройстве", style = MaterialTheme.typography.bodySmall)
+                    } else if (moment.uploadState == LocalMomentDatabase.UPLOAD_UPLOADED_PRIVATE) {
                         Text("Сохранено в личном облачном архиве", color = MaterialTheme.colorScheme.primary)
                     } else {
                         Button(

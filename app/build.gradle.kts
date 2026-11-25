@@ -44,14 +44,15 @@ android {
         minSdk = 24
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 38
-        versionName = "0.55.0"
+        versionCode = 39
+        versionName = "0.55.1"
         buildConfigField("String", "MOMENTO_API_BASE_URL", "\"$escapedMomentoApiBaseUrl\"")
         buildConfigField("boolean", "MOMENTO_API_CONFIGURED", apiConfigured.toString())
         buildConfigField("String", "GOOGLE_SERVER_CLIENT_ID", "\"$googleServerClientId\"")
         buildConfigField("String", "YANDEX_CLIENT_ID", "\"$yandexClientId\"")
         buildConfigField("String", "VK_CLIENT_ID", "\"$vkClientId\"")
         buildConfigField("boolean", "VK_CLIENT_CONFIGURED", (vkClientId.isNotBlank() && vkClientSecret.isNotBlank()).toString())
+        manifestPlaceholders["momentoAppLabel"] = "MOMENTO"
         manifestPlaceholders["YANDEX_CLIENT_ID"] = yandexClientId.ifBlank { "not-configured" }
         manifestPlaceholders["YANDEX_OAUTH_HOST"] = "oauth.yandex.ru"
         manifestPlaceholders["VKIDClientID"] = vkClientId
@@ -73,6 +74,12 @@ android {
         }
     }
     buildTypes {
+        getByName("debug") {
+            if (allowOfflinePreview && !apiConfigured) {
+                applicationIdSuffix = ".preview"
+                manifestPlaceholders["momentoAppLabel"] = "MOMENTO Офлайн"
+            }
+        }
         getByName("release") {
             isMinifyEnabled = false
             if (!providers.environmentVariable("MOMENTO_KEYSTORE").orNull.isNullOrBlank()) {
