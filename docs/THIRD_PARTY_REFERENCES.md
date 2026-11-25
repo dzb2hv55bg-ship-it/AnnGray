@@ -30,3 +30,10 @@ Before copying any code from a repository:
 | [AndroidX Media 1.8.0](https://github.com/androidx/media/tree/1.8.0) and [Transformer](https://developer.android.com/media/media3/transformer) | MP4 export from a chronological composition. The Android module uses the same Media3 version for Transformer and ExoPlayer. | [Apache-2.0](https://github.com/androidx/media/blob/1.8.0/LICENSE) |
 | [Android secure file sharing](https://developer.android.com/training/secure-file-sharing) | FileProvider grants read access to the selected copy via the Android Sharesheet. | Android platform guidance |
 | [Android emulator runner](https://github.com/ReactiveCircus/android-emulator-runner/tree/v2) | API 35 instrumentation in the offline Android CI job. | [MIT](https://github.com/ReactiveCircus/android-emulator-runner/blob/v2/LICENSE) |
+
+## Обновление дизайна MOMENTO 0.55.2
+
+- Размещение кнопок камеры и проверка наличия объективов сверены с [Jetpack Camera App](https://github.com/google/jetpack-camera-app) и [CameraX samples](https://github.com/android/camera-samples). В MOMENTO объектив меняется между записями.
+- Тему, формы, навигацию и общие компоненты сверили с [Android Compose Samples](https://github.com/android/compose-samples), [Now in Android](https://github.com/android/nowinandroid) и [рекомендациями Android по дизайн-системам](https://developer.android.com/develop/ui/compose/designsystems).
+- [Setlog](https://apps.apple.com/us/app/setlog-friends-camera/id6587576438) послужил референсом для сценария коротких видео с близкими. [1 Second Everyday](https://apps.apple.com/us/app/1-second-everyday-video-diary/id587823548) и [SoloLog](https://apps.apple.com/us/app/sololog-setlog-vlog/id6776108630) использованы при сравнении сценариев личного архива и фильма из коротких записей.
+- Визуальная основа — присланные макеты MOMENTO. В концепте видоискатель содержит иллюстративное фото. В приложении видоискатель показывает текущую камеру, а список комнат и архив отображают реальные данные.

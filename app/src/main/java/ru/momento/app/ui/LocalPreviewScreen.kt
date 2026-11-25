@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -123,11 +126,13 @@ internal fun LocalPreviewScreen(onExit: () -> Unit) {
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MomentoTokens.screenPadding),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    MomentoScreenHeading("Попробовать без аккаунта")
-                    Text("Записывай моменты на 2–5 секунд. Они останутся в локальном архиве даже после входа в аккаунт. Вернуться к ним можно через этот же режим.")
+                    MomentoProfileHeader("Локальный профиль",
+                        "Здесь твои записи остаются на устройстве. Открой этот режим снова, чтобы вернуться к ним.")
+                    MomentoRoomTile("Мой архив", "Открой записи и пересмотри любой момент.",
+                        "Хранится на устройстве", onClick = { page = LocalPage.ARCHIVE }, icon = Icons.Default.Folder)
+                    MomentoRoomTile("Жизнь в секундах", "Выбери период и собери один фильм из коротких записей.",
+                        "Экспорт в MP4", onClick = { page = LocalPage.FILM }, icon = Icons.Default.PlayArrow)
                     MomentoPrimaryAction("Записать момент", onClick = { page = LocalPage.CAMERA })
-                    TextButton(onClick = { page = LocalPage.ARCHIVE }) { Text("Мой архив") }
-                    TextButton(onClick = { page = LocalPage.FILM }) { Text("Жизнь в секундах") }
                     TextButton(onClick = onExit) { Text("Выйти из локального режима") }
                 }
                 LocalPage.ARCHIVE -> if (records != null) {

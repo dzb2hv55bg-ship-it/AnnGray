@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -256,12 +259,14 @@ internal fun SpecialRoomsScreen(
             else -> {
                 item {
                     var code by rememberSaveable { mutableStateOf("") }
-                    MomentoScreenHeading("События и секретные комнаты", "Совместная история из коротких видео")
-                    if (previewOnly) Text("Здесь можно осмотреть формы. Совместная история и приглашения доступны после входа.")
-                    MomentoPrimaryAction(if (previewOnly) "Посмотреть комнату события" else "Создать комнату события",
-                        enabled = !busy, onClick = { kind = "EVENT" })
-                    TextButton(onClick = { kind = "SECRET" }, enabled = !busy) {
-                        Text(if (previewOnly) "Посмотреть секретную комнату" else "Создать секретную комнату")
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        MomentoScreenHeading("Комнаты", "Твои влоги и совместные истории")
+                        if (previewOnly) Text("Формы доступны офлайн. Для создания комнаты и приглашений войди в аккаунт.",
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        MomentoRoomTile("Комната события", "Собери общую историю поездки, встречи или праздника.",
+                            "Доступ по приглашению", onClick = { if (!busy) kind = "EVENT" }, icon = Icons.Default.Groups)
+                        MomentoRoomTile("Секретная комната", "Сохраняйте моменты вдвоём и приглашайте только друг друга.",
+                            "Два участника", onClick = { if (!busy) kind = "SECRET" }, icon = Icons.Default.Lock)
                     }
                     if (!previewOnly) {
                         OutlinedTextField(code, { code = it }, label = { Text("Ссылка или код приглашения") },

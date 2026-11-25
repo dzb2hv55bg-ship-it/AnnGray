@@ -7,6 +7,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -27,13 +35,16 @@ import androidx.compose.ui.unit.dp
 internal fun MomentoNavigationBar(selectedIndex: Int, onSelect: (Int) -> Unit) {
     val labels = listOf("Камера", "Комнаты", "Подписки", "Профиль")
     val icons = listOf(Icons.Default.Videocam, Icons.Default.VideoLibrary,
-        Icons.Default.CollectionsBookmark, Icons.Default.PersonOutline)
-    NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
+        Icons.Default.FavoriteBorder, Icons.Default.PersonOutline)
+    NavigationBar(
+        modifier = Modifier.padding(horizontal = 8.dp).clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow, tonalElevation = 0.dp
+    ) {
         labels.forEachIndexed { index, label ->
             NavigationBarItem(
                 selected = selectedIndex == index,
                 onClick = { onSelect(index) },
-                icon = { Icon(icons[index], contentDescription = label) },
+                icon = { Icon(icons[index], contentDescription = null) },
                 label = { Text(label, style = MaterialTheme.typography.labelSmall) },
                 alwaysShowLabel = true,
                 colors = NavigationBarItemDefaults.colors(
@@ -101,9 +112,12 @@ internal fun MomentoStatePanel(
     val palette = MaterialTheme.colorScheme
     Card(
         modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(MomentoTokens.cardRadius),
+        border = BorderStroke(1.dp, if (isError) palette.error.copy(alpha = 0.35f) else palette.outlineVariant),
         colors = CardDefaults.cardColors(containerColor = if (isError) palette.errorContainer else palette.surfaceContainerLow)
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(if (isError) Icons.Default.Warning else Icons.Default.Info, null,
+                tint = if (isError) palette.onErrorContainer else palette.primary)
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
                 color = if (isError) palette.onErrorContainer else palette.onSurface)
             Text(detail, style = MaterialTheme.typography.bodyMedium,
@@ -118,18 +132,22 @@ internal fun MomentoStatePanel(
 @Composable
 internal fun MomentoRoomTile(
     title: String, description: String, metadata: String, onClick: () -> Unit,
-    footer: String? = null
+    footer: String? = null,
+    icon: ImageVector = Icons.Default.VideoLibrary
 ) {
     Card(
         onClick = onClick, modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(MomentoTokens.cardRadius),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
         Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(52.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(18.dp)),
+            Box(Modifier.size(54.dp).background(
+                Brush.verticalGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.surfaceContainerHigh)),
+                RoundedCornerShape(18.dp)),
                 contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.VideoLibrary, contentDescription = null,
+                Icon(icon, contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(25.dp))
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -137,34 +155,33 @@ internal fun MomentoRoomTile(
                     maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (description.isNotBlank()) Text(description, style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(metadata, style = MaterialTheme.typography.labelMedium,
+                if (metadata.isNotBlank()) Text(metadata, style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary)
                 if (footer != null) Text(footer, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
             }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
-/** Recording progress is derived from CameraX state, not a decorative success animation. */
 @Composable
-internal fun MomentoRecordingStatus(isRecording: Boolean, secondsElapsed: Int) {
-    val progress = (secondsElapsed.coerceIn(0, 5) / 5f)
-    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically) {
-            Text(if (isRecording) "● ИДЁТ ЗАПИСЬ" else "ЖИВОЙ МОМЕНТ",
-                color = if (isRecording) Color(0xFFFF8C86) else Color.White,
-                style = MaterialTheme.typography.labelMedium)
-            Text(if (isRecording) "${secondsElapsed.coerceIn(0,5)} / 5 с" else "2–5 секунд",
-                color = Color.White, style = MaterialTheme.typography.labelLarge)
+internal fun MomentoProfileHeader(title: String, description: String) {
+    val palette = MaterialTheme.colorScheme
+    Column(
+        Modifier.fillMaxWidth().background(
+            Brush.verticalGradient(listOf(palette.primaryContainer, palette.surfaceContainerLow)),
+            RoundedCornerShape(32.dp)
+        ).padding(22.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Surface(color = palette.surface, shape = CircleShape) {
+            Icon(Icons.Default.PersonOutline, null, Modifier.padding(12.dp).size(24.dp), tint = palette.primary)
         }
-        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(5.dp),
-            color = Color(0xFF81B7FF), trackColor = Color(0xFF36465E))
+        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(description, style = MaterialTheme.typography.bodyMedium, color = palette.onSurfaceVariant)
     }
 }
-
 
 /** Account-wide reminder policy; no per-room hour/count controls are exposed. */
 @Composable

@@ -63,7 +63,7 @@ fun SubscriptionsScreen(accessToken: String, api: MomentoApiClient, onOpenRoom: 
         } finally { loading = false }
     }
     Column(Modifier.fillMaxSize().padding(horizontal = MomentoTokens.screenPadding)) {
-        MomentoScreenHeading("Подписки", "Обновления комнат и авторов")
+        MomentoScreenHeading("Подписки", "Следи за новыми видео авторов и комнат, на которые подписан.")
         OutlinedTextField(value = search, onValueChange = { search = it }, modifier = Modifier.fillMaxWidth(),
             label = { Text("Найти открытые комнаты") }, singleLine = true)
         TextButton(onClick = { refreshKey++ }) { Text("Найти / обновить") }
@@ -75,8 +75,10 @@ fun SubscriptionsScreen(accessToken: String, api: MomentoApiClient, onOpenRoom: 
             item { Text("Мои комнаты в подписках", style = MaterialTheme.typography.titleMedium) }
             if (followed.isEmpty()) item { MomentoStatePanel("Пока нет подписок", "Подпишись на интересные комнаты, чтобы видеть новые моменты здесь.") }
             items(followed, key = { "follow_${it.id}" }) { room ->
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
+                OutlinedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
+                    colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(room.name, style = MaterialTheme.typography.titleMedium)
                         Text(room.author)
                         Row {
@@ -96,12 +98,15 @@ fun SubscriptionsScreen(accessToken: String, api: MomentoApiClient, onOpenRoom: 
             item { Text("Новые моменты", style = MaterialTheme.typography.titleMedium) }
             if (updates.isEmpty()) item { MomentoStatePanel("Нет новых моментов", "Когда авторы опубликуют видео, они появятся здесь.") }
             items(updates, key = { "update_${it.momentId}" }) { update ->
-                TextButton(onClick = { onOpenRoom(update.spaceId) }) { Text("${update.roomName} — новый момент") }
+                MomentoRoomTile(update.roomName, "Открой комнату, чтобы посмотреть обновление.",
+                    "Новый момент", onClick = { onOpenRoom(update.spaceId) })
             }
             item { Text("Открытые комнаты", style = MaterialTheme.typography.titleMedium) }
             items(discovered, key = { "discovery_${it.id}" }) { room ->
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
+                OutlinedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
+                    colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(room.name, style = MaterialTheme.typography.titleMedium)
                         Text(room.description)
                         Row {

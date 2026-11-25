@@ -458,7 +458,7 @@ fun MomentoApp() {
             )
             Tab.PROFILE -> androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(MomentoTokens.screenPadding), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                item { MomentoScreenHeading("Профиль", "Личные моменты и настройки") }
+                item { MomentoProfileHeader("Профиль", "Личные моменты, настройки аккаунта и напоминания.") }
                 item {
                     VideoAvatarSection(savedMoments)
                 }

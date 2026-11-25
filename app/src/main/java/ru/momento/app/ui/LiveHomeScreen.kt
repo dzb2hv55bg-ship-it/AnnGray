@@ -36,36 +36,31 @@ fun LiveHomeScreen(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        item {
-            Text("Твой момент — сейчас", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text("Живые истории по 2–5 секунд", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        item {
-            Button(onClick = onRecord, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(50.dp)) {
-                Text("◉  Записать момент")
-            }
-        }
+        item { MomentoScreenHeading("Комнаты", "Твои влоги и совместные истории") }
         item {
             val current = rooms.firstOrNull { it.id == activeRoomId }
-            Text("Комната для записи: ${current?.name ?: "выбери в камере"}", style = MaterialTheme.typography.bodyMedium)
+            MomentoInfoCard(
+                "Куда попадёт запись",
+                current?.let { "Следующий момент будет сохранён в комнате «${it.name}»." }
+                    ?: "Открой камеру, чтобы записать 2–5 секунд и сохранить момент.",
+                "Открыть камеру", onRecord
+            )
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onMine) { Text("Мои комнаты") }
-                OutlinedButton(onClick = onCreate) { Text("+ Создать") }
-            }
+            MomentoRoomTile("Создать комнату", "Объедини моменты одной темы в отдельную историю.",
+                "", onClick = onCreate)
         }
-        item { Text("Мои истории", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        item { MomentoSectionTitle("Мои комнаты", "Открой историю, чтобы пересмотреть записанные моменты.") }
         if (rooms.isEmpty()) item {
-            Text("Комнат пока нет. Создай первую и запиши живой момент.")
+            MomentoStatePanel("Комнат пока нет", "Создай комнату для дня, поездки или проекта.")
         }
         items(rooms.take(5), key = { it.id }) { room ->
-            Card(modifier = Modifier.fillMaxWidth().clickable { onOpen(room.id) }, shape = RoundedCornerShape(20.dp)) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(room.name, style = MaterialTheme.typography.titleMedium)
-                    Text(if (room.visibility == "PRIVATE") "Личная история · на устройстве" else "Комната · на устройстве", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+            MomentoRoomTile(room.name, room.description,
+                if (room.visibility == "PRIVATE") "Личная история · на устройстве" else "Комната · на устройстве",
+                onClick = { onOpen(room.id) })
+        }
+        if (rooms.isNotEmpty()) item {
+            OutlinedButton(onClick = onMine, modifier = Modifier.fillMaxWidth()) { Text("Все мои комнаты") }
         }
     }
 }

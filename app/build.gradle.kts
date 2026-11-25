@@ -44,8 +44,8 @@ android {
         minSdk = 24
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 39
-        versionName = "0.55.1"
+        versionCode = 40
+        versionName = "0.55.2"
         buildConfigField("String", "MOMENTO_API_BASE_URL", "\"$escapedMomentoApiBaseUrl\"")
         buildConfigField("boolean", "MOMENTO_API_CONFIGURED", apiConfigured.toString())
         buildConfigField("String", "GOOGLE_SERVER_CLIENT_ID", "\"$googleServerClientId\"")
@@ -76,8 +76,8 @@ android {
     buildTypes {
         getByName("debug") {
             if (allowOfflinePreview && !apiConfigured) {
-                applicationIdSuffix = ".preview"
-                manifestPlaceholders["momentoAppLabel"] = "MOMENTO Офлайн"
+                applicationIdSuffix = ".preview.design"
+                manifestPlaceholders["momentoAppLabel"] = "MOMENTO Дизайн"
             }
         }
         getByName("release") {
