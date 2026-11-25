@@ -80,13 +80,13 @@ import java.util.Date
 import java.util.Locale
 
 private enum class Tab(val label: String) {
-    SPACES("Комнаты"), SUBSCRIPTIONS("Подписки"), CREATE("Создать"), MINE("Мои"), SEARCH("Поиск"), PROFILE("Профиль"), ARCHIVE("Архив"), CALENDAR("Календарь"), CAPSULES("Капсулы"), RECORD("Момент"), ROOM_DETAIL("Комната"), ROOM_PLAYER("Просмотр")
+    SPACES("Комнаты"), SPECIAL_ROOMS("События и секретные комнаты"), SPECIAL_RECORD("Запись в комнату"), SUBSCRIPTIONS("Подписки"), CREATE("Создать"), MINE("Мои"), SEARCH("Поиск"), PROFILE("Профиль"), ARCHIVE("Архив"), CALENDAR("Календарь"), FILM("Жизнь в секундах"), CAPSULES("Капсулы"), RECORD("Момент"), ROOM_DETAIL("Комната"), ROOM_PLAYER("Просмотр")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MomentoApp() {
-    val launchActivity = LocalContext.current as? android.app.Activity
+    val launchActivity = androidx.activity.compose.LocalActivity.current
     val initialRoom = launchActivity?.intent?.getStringExtra("record_room_id")
     var selectedTab by rememberSaveable { mutableStateOf(if (initialRoom != null) Tab.RECORD else Tab.SPACES) }
     var archiveError by rememberSaveable { mutableStateOf<String?>(null) }
@@ -139,11 +139,17 @@ fun MomentoApp() {
             delay(15_000L)
         }
     }
+    var localPreview by rememberSaveable { mutableStateOf(false) }
+    if (authSession == null && localPreview) {
+        LocalPreviewScreen { localPreview = false }
+        return
+    }
     var guestMode by rememberSaveable { mutableStateOf(false) }
     var guestPublishing by rememberSaveable { mutableStateOf(false) }
     var guestLoginOnly by rememberSaveable { mutableStateOf(false) }
     if (authSession == null && guestMode && !guestPublishing) {
         GuestHomeScreen(
+            onLocalPreview = { localPreview = true },
             onPublish = { guestPublishing = true; guestLoginOnly = false },
             onSignIn = { guestPublishing = true; guestLoginOnly = true },
             onLeave = { guestMode = false }
@@ -159,7 +165,8 @@ fun MomentoApp() {
         }
         AuthScreen(vault = sessionVault,
             onAuthenticated = { authSession = it; if (guestPublishing && !guestLoginOnly) selectedTab = Tab.CREATE; guestPublishing = false; guestMode = false },
-            onGuest = { guestMode = true; guestPublishing = false })
+            onGuest = { guestMode = true; guestPublishing = false },
+            onLocalPreview = { localPreview = true })
         return
     }
     // Fail closed until /auth/me verifies which account owns the local archive.
@@ -201,6 +208,8 @@ fun MomentoApp() {
     var uploadingMomentId by remember(accountId) { mutableStateOf<String?>(null) }
     val localSpaces = remember(accountId) { mutableStateListOf<LocalSpace>() }
     var publicRoomId by remember(accountId) { mutableStateOf<String?>(null) }
+    var sharedRoomId by rememberSaveable(accountId) { mutableStateOf<String?>(null) }
+    var sharedRoomName by rememberSaveable(accountId) { mutableStateOf("") }
     var activeRoomId by rememberSaveable(accountId) { mutableStateOf<String?>(initialRoom) }
     var activeRoomLinks by remember(accountId) { mutableStateOf(emptyList<ru.momento.app.data.RoomMomentLink>()) }
     fun refreshRoomLinks(roomId: String) {
@@ -213,7 +222,7 @@ fun MomentoApp() {
     }
     // Resume only owner-approved QUEUED uploads; no automatic publication to rooms.
     LaunchedEffect(database, accountId) {
-        val queued = withContext(Dispatchers.IO) { database.queuedMoments().isNotEmpty() }
+        val queued = withContext(Dispatchers.IO) { database.queuedMoments().isNotEmpty() || database.sharedRoomSyncItems().isNotEmpty() }
         if (queued) ru.momento.app.data.MomentUploadWorker.enqueue(context, accountId)
     }
     LaunchedEffect(database) {
@@ -262,7 +271,13 @@ fun MomentoApp() {
         },
         bottomBar = {
             val mainTabs = listOf(Tab.RECORD, Tab.SPACES, Tab.SUBSCRIPTIONS, Tab.PROFILE)
-            MomentoNavigationBar(mainTabs.indexOf(selectedTab).coerceAtLeast(0)) { index ->
+            val mainTab = when (selectedTab) {
+                Tab.ARCHIVE, Tab.CALENDAR, Tab.FILM, Tab.CAPSULES -> Tab.PROFILE
+                Tab.CREATE, Tab.MINE, Tab.SEARCH, Tab.SPECIAL_ROOMS, Tab.SPECIAL_RECORD,
+                Tab.ROOM_DETAIL, Tab.ROOM_PLAYER -> Tab.SPACES
+                else -> selectedTab
+            }
+            MomentoNavigationBar(mainTabs.indexOf(mainTab)) { index ->
                 selectedTab = mainTabs[index]
             }
         }
@@ -272,14 +287,53 @@ fun MomentoApp() {
                 Text(message, color = MaterialTheme.colorScheme.error, modifier = Modifier.fillMaxWidth().padding(12.dp))
             }
             when (selectedTab) {
-            Tab.SPACES -> LiveHomeScreen(
-                rooms = localSpaces,
-                activeRoomId = activeRoomId,
-                onRecord = { selectedTab = Tab.RECORD },
-                onCreate = { selectedTab = Tab.CREATE },
-                onMine = { selectedTab = Tab.MINE },
-                onOpen = ::openRoom
-            )
+            Tab.SPACES -> {
+                TextButton(onClick = { selectedTab = Tab.SPECIAL_ROOMS }) { Text("События и секретные комнаты") }
+                LiveHomeScreen(
+                    rooms = localSpaces,
+                    activeRoomId = activeRoomId,
+                    onRecord = { selectedTab = Tab.RECORD },
+                    onCreate = { selectedTab = Tab.CREATE },
+                    onMine = { selectedTab = Tab.MINE },
+                    onOpen = ::openRoom
+                )
+            }
+            Tab.SPECIAL_ROOMS -> androidx.compose.runtime.key(accountId) {
+                SpecialRoomsScreen(authSession?.accessToken.orEmpty(), accountId, uploadClient, onRecord = { id, name ->
+                    sharedRoomId = id
+                    sharedRoomName = name
+                    selectedTab = Tab.SPECIAL_RECORD
+                }, onBack = { selectedTab = Tab.SPACES })
+            }
+            Tab.SPECIAL_RECORD -> {
+                val destination = sharedRoomId
+                if (destination == null) {
+                    TextButton(onClick = { selectedTab = Tab.SPECIAL_ROOMS }) { Text("К комнатам") }
+                } else CameraScreen(
+                    verifiedOwnerId = accountId,
+                    roomNames = listOf(destination to sharedRoomName),
+                    selectedRoomId = destination,
+                    onSaved = { file, duration ->
+                        scope.launch {
+                            val saved = runCatching {
+                                withContext(Dispatchers.IO) {
+                                    val moment = database.insertMoment(file, duration)
+                                    database.queueSharedRoomMoment(moment.id, destination)
+                                    moment
+                                }
+                            }
+                            saved.onSuccess {
+                                savedMoments.add(0, it)
+                                ru.momento.app.data.MomentUploadWorker.enqueue(context, accountId)
+                                selectedTab = Tab.SPECIAL_ROOMS
+                            }.onFailure {
+                                archiveError = "Видео осталось на устройстве. Не удалось поставить его в очередь комнаты."
+                            }
+                        }
+                    },
+                    onClose = { selectedTab = Tab.SPECIAL_ROOMS }
+                )
+            }
             Tab.SUBSCRIPTIONS -> {
                 val opened = publicRoomId
                 if (opened == null) SubscriptionsScreen(authSession!!.accessToken, uploadClient,
@@ -361,6 +415,9 @@ fun MomentoApp() {
                 }
             }
             Tab.CALENDAR -> LifeCalendarScreen(savedMoments)
+            Tab.FILM -> androidx.compose.runtime.key(accountId) {
+                LifeFilmScreen(accountId, savedMoments) { selectedTab = Tab.PROFILE }
+            }
             Tab.CAPSULES -> CapsulesScreen(authSession?.accessToken.orEmpty(), remember { ru.momento.app.network.MomentoApiClient() })
             Tab.RECORD -> CameraScreen(
                 verifiedOwnerId = accountId,
@@ -401,7 +458,7 @@ fun MomentoApp() {
             )
             Tab.PROFILE -> androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(MomentoTokens.screenPadding), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                item { MomentoScreenHeading("Профиль", "Личные моменты и настройки") }
+                item { MomentoProfileHeader("Профиль", "Личные моменты, настройки аккаунта и напоминания.") }
                 item {
                     VideoAvatarSection(savedMoments)
                 }
@@ -453,6 +510,7 @@ fun MomentoApp() {
                 item { MomentoSectionTitle("Мои материалы") }
                 item { Button(onClick = { selectedTab = Tab.ARCHIVE }) { Text("Личный архив моментов") } }
                 item { Button(onClick = { selectedTab = Tab.CALENDAR }) { Text("Календарь жизни") } }
+                item { Button(onClick = { selectedTab = Tab.FILM }) { Text("Жизнь в секундах") } }
                 item { Button(onClick = { selectedTab = Tab.CAPSULES }) { Text("Капсулы времени") } }
                 item { MomentoPrimaryAction("Записать личный момент", onClick = { activeRoomId = null; selectedTab = Tab.RECORD }) }
                 /* Button(onClick = { activeRoomId = null; selectedTab = Tab.RECORD }) { Text("Записать личный момент") }
@@ -528,16 +586,21 @@ private fun HomeScreen(
 }
 
 @Composable
-private fun ArchiveScreen(
+internal fun ArchiveScreen(
     padding: PaddingValues,
     moments: List<LocalMoment>,
     uploadingMomentId: String?,
-    onUpload: (LocalMoment) -> Unit
+    onRecord: (() -> Unit)? = null,
+    onUpload: ((LocalMoment) -> Unit)? = null
 ) {
     if (moments.isEmpty()) {
-        SimpleScreen(padding, "Мой архив", "Здесь будут храниться твои моменты по датам. Запиши первый момент — он появится здесь.")
+        Column(Modifier.fillMaxSize().padding(padding).padding(MomentoTokens.screenPadding)) {
+            MomentoStatePanel("Мой архив", "Запиши видео на 2–5 секунд. Первый момент появится здесь.",
+                if (onRecord != null) "Открыть камеру" else null, onRecord)
+        }
         return
     }
+    var playingId by remember(moments.isEmpty()) { mutableStateOf<String?>(null) }
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(padding),
         contentPadding = PaddingValues(16.dp),
@@ -554,17 +617,31 @@ private fun ArchiveScreen(
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(Modifier.height(8.dp))
-                    AndroidView(
-                        factory = { context -> VideoView(context).apply {
-                            setVideoURI(Uri.fromFile(file))
-                            setOnPreparedListener { player -> player.isLooping = true; start() }
-                        } },
-                        modifier = Modifier.fillMaxWidth().height(220.dp)
-                    )
+                    if (playingId == moment.id && file.isFile) {
+                        androidx.compose.runtime.key(moment.id) {
+                            AndroidView(
+                                factory = { context -> VideoView(context).apply {
+                                    setVideoURI(Uri.fromFile(file))
+                                    setMediaController(android.widget.MediaController(context))
+                                    start()
+                                } },
+                                onReset = null,
+                                onRelease = { it.stopPlayback() },
+                                modifier = Modifier.fillMaxWidth().height(220.dp)
+                            )
+                        }
+                        TextButton(onClick = { playingId = null }) { Text("Закрыть видео") }
+                    } else if (file.isFile) {
+                        TextButton(onClick = { playingId = moment.id }) { Text("Смотреть момент") }
+                    } else {
+                        Text("Файл момента отсутствует на устройстве.", color = MaterialTheme.colorScheme.error)
+                    }
                     Spacer(Modifier.height(6.dp))
                     Text("Личный архив · ${moment.durationMillis / 1000.0} с · ${moment.byteSize / 1024} КБ", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(8.dp))
-                    if (moment.uploadState == LocalMomentDatabase.UPLOAD_UPLOADED_PRIVATE) {
+                    if (onUpload == null) {
+                        Text("Хранится на этом устройстве", style = MaterialTheme.typography.bodySmall)
+                    } else if (moment.uploadState == LocalMomentDatabase.UPLOAD_UPLOADED_PRIVATE) {
                         Text("Сохранено в личном облачном архиве", color = MaterialTheme.colorScheme.primary)
                     } else {
                         Button(

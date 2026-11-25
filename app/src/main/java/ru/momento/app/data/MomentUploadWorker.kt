@@ -9,6 +9,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkerParameters
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import ru.momento.app.network.MomentoApiClient
@@ -62,6 +63,32 @@ class MomentUploadWorker(context: Context, params: WorkerParameters) : Coroutine
                     if (!permanent) {
                         return@withContext Result.retry()
                     }
+                }
+            }
+            val sharedMoments = database.getMoments().associateBy { it.id }
+            for ((momentId, roomId) in database.sharedRoomSyncItems()) {
+                val moment = sharedMoments[momentId] ?: continue
+                if (moment.uploadState == LocalMomentDatabase.UPLOAD_FAILED) {
+                    database.setRoomSyncPhase(momentId, "FAILED")
+                    continue
+                }
+                val remoteId = moment.remoteMomentId ?: return@withContext Result.retry()
+                if (vault.readVerifiedAccountId() != expectedOwner) return@withContext Result.failure()
+                try {
+                    val active = MomentoSessionRefresh.refreshForOwner(vault, expectedOwner)
+                        ?: return@withContext Result.failure()
+                    if (vault.readVerifiedAccountId() != expectedOwner) return@withContext Result.failure()
+                    client.attachUploadedMoment(active.accessToken, roomId, remoteId)
+                    database.setRoomSyncPhase(momentId, "DONE")
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: MomentoApiException) {
+                    if (failure.statusCode !in 400..499 || failure.statusCode in listOf(401, 408, 429)) {
+                        return@withContext Result.retry()
+                    }
+                    database.setRoomSyncPhase(momentId, "FAILED")
+                } catch (_: java.io.IOException) {
+                    return@withContext Result.retry()
                 }
             }
             // Durable room sync: server room key and remote moment IDs survive process death.

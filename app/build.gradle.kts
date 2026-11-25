@@ -44,14 +44,15 @@ android {
         minSdk = 24
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 37
-        versionName = "0.54.3"
+        versionCode = 40
+        versionName = "0.55.2"
         buildConfigField("String", "MOMENTO_API_BASE_URL", "\"$escapedMomentoApiBaseUrl\"")
         buildConfigField("boolean", "MOMENTO_API_CONFIGURED", apiConfigured.toString())
         buildConfigField("String", "GOOGLE_SERVER_CLIENT_ID", "\"$googleServerClientId\"")
         buildConfigField("String", "YANDEX_CLIENT_ID", "\"$yandexClientId\"")
         buildConfigField("String", "VK_CLIENT_ID", "\"$vkClientId\"")
         buildConfigField("boolean", "VK_CLIENT_CONFIGURED", (vkClientId.isNotBlank() && vkClientSecret.isNotBlank()).toString())
+        manifestPlaceholders["momentoAppLabel"] = "MOMENTO"
         manifestPlaceholders["YANDEX_CLIENT_ID"] = yandexClientId.ifBlank { "not-configured" }
         manifestPlaceholders["YANDEX_OAUTH_HOST"] = "oauth.yandex.ru"
         manifestPlaceholders["VKIDClientID"] = vkClientId
@@ -73,6 +74,12 @@ android {
         }
     }
     buildTypes {
+        getByName("debug") {
+            if (allowOfflinePreview && !apiConfigured) {
+                applicationIdSuffix = ".preview.design"
+                manifestPlaceholders["momentoAppLabel"] = "MOMENTO Дизайн"
+            }
+        }
         getByName("release") {
             isMinifyEnabled = false
             if (!providers.environmentVariable("MOMENTO_KEYSTORE").orNull.isNullOrBlank()) {
@@ -87,12 +94,14 @@ android {
     }
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.credentials)
@@ -110,6 +119,7 @@ dependencies {
     implementation(libs.androidx.camera.video)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
+    implementation(libs.androidx.media3.transformer)
     implementation(libs.androidx.camera.view)
 
     implementation(platform(libs.androidx.compose.bom))

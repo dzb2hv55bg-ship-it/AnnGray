@@ -13,6 +13,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -63,7 +64,8 @@ import ru.momento.app.network.MomentoSessionVault
 fun AuthScreen(
     vault: MomentoSessionVault,
     onAuthenticated: (MomentoAuthSession) -> Unit,
-    onGuest: () -> Unit = {}
+    onGuest: () -> Unit = {},
+    onLocalPreview: () -> Unit
 ) {
     var contactType by rememberSaveable { mutableStateOf("EMAIL") }
     var contact by rememberSaveable { mutableStateOf("") }
@@ -174,18 +176,25 @@ fun AuthScreen(
                     }
                 }
                 item {
-                    Button(
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MomentoPrimaryAction("Попробовать без аккаунта", onClick = onLocalPreview)
+                        Text("Камера, личный архив и монтаж доступны без интернета. Записи хранятся отдельно от любого аккаунта.",
+                            style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                item {
+                    OutlinedButton(
                         onClick = onGuest,
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         shape = RoundedCornerShape(18.dp)
-                    ) { Text("Войти как гость", style = MaterialTheme.typography.titleMedium) }
+                    ) { Text("Смотреть публичные комнаты", style = MaterialTheme.typography.titleMedium) }
                 }
                 if (!apiConfigured) {
                     item {
                         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer), shape = RoundedCornerShape(20.dp)) {
                             Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("Вход пока недоступен", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
-                                Text("В этой сборке не подключён сервер MOMENTO. Для входа по почте, телефону или через другие сервисы требуется настроенный HTTPS API. Это не ошибка твоего номера или email.", color = MaterialTheme.colorScheme.onErrorContainer)
+                                Text("Сервер MOMENTO в этой сборке не настроен. Чтобы проверить камеру и монтаж, выбери «Попробовать без аккаунта».", color = MaterialTheme.colorScheme.onErrorContainer)
                             }
                         }
                     }

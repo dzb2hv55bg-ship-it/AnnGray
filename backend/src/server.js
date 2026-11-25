@@ -15,8 +15,8 @@ import { validateUploadHeaders, readVideoBytes, storeMomentUpload } from './medi
 import { parseCalendarOptions, getPrivateCalendar } from './calendar.js';
 import { createCapsule, listCapsules, cancelCapsule } from './capsules.js';
 import { normalizeContact, hashContact, encryptContact, deliverOtp, isValidOtp, reserveOtpChallenge, assertOtpChallengePurpose } from './auth-otp.js';
-import { isUuid, publishRoom, attachMoment, setRoomSubscription, setAuthorSubscription, getSubscriptions, getSubscriptionUpdates, getPublicRoom } from './live-vlogs.js';
-import { acceptInvite, createInvite, createSpace, discoverSpaces, getRoomTimeline, joinPublicSpace, listJoinRequests, listSpaces, reviewJoinRequest, revokeInvite, validateCreateSpace, validateTimelineCursor } from './spaces.js';
+import { authorizedVideoKey, isUuid, publishRoom, attachMoment, setRoomSubscription, setAuthorSubscription, getSubscriptions, getSubscriptionUpdates, getPublicRoom } from './live-vlogs.js';
+import { acceptInvite, changeSpecialRoom, listSpecialRoomMembers, createInvite, createSpace, discoverSpaces, getRoomTimeline, joinPublicSpace, listJoinRequests, listSpaces, reviewJoinRequest, revokeInvite, validateCreateSpace, validateTimelineCursor } from './spaces.js';
 
 const { Pool } = pg;
 const required = ['DATABASE_URL', 'PUBLIC_APP_URL', 'MOMENTO_JWT_SECRET', 'MOMENTO_JWT_ISSUER', 'MOMENTO_JWT_AUDIENCE', 'REFRESH_TOKEN_PEPPER'];
@@ -512,21 +512,10 @@ const server = http.createServer(async (req, res) => {
     }
     const videoMatch = /^\/v1\/moments\/([0-9a-f-]{36})\/video$/i.exec(url.pathname);
     if (req.method === 'GET' && videoMatch && isUuid(videoMatch[1])) {
-      const access=await pool.query(`SELECT a.storage_key FROM moments m
-        JOIN media_assets a ON a.id=m.media_asset_id AND a.status='READY'
-        WHERE m.id=$2 AND m.deleted_at IS NULL AND m.moderation='VISIBLE'
-          AND (m.owner_id=$1 OR EXISTS(
-            SELECT 1 FROM moment_audiences ma JOIN spaces s ON s.id=ma.space_id
-            WHERE ma.moment_id=m.id AND s.archived_at IS NULL
-              AND (EXISTS(SELECT 1 FROM space_members sm WHERE sm.space_id=s.id AND sm.user_id=$1)
-                OR (s.visibility='PUBLIC' AND s.published_at IS NOT NULL))
-              AND NOT EXISTS(SELECT 1 FROM user_blocks b WHERE
-                (b.blocker_id=$1 AND b.blocked_id=s.owner_id) OR
-                (b.blocker_id=s.owner_id AND b.blocked_id=$1))))`,[userId,videoMatch[1]]);
-      if(!access.rowCount) return send(res,404,{error:'VIDEO_UNAVAILABLE'});
+      const key = await authorizedVideoKey(pool, userId, videoMatch[1]);
+      if (!key) return send(res, 404, {error: 'VIDEO_UNAVAILABLE'});
       const storageDir=process.env.MOMENTO_MEDIA_DIR;
       if(!storageDir) return send(res,503,{error:'MEDIA_STORAGE_NOT_CONFIGURED'});
-      const key=access.rows[0].storage_key;
       if(!/^[0-9a-f-]{36}\.mp4$/i.test(key)) return send(res,404,{error:'VIDEO_UNAVAILABLE'});
       const path=join(storageDir,key);
       let info;
@@ -606,6 +595,23 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && roomDetails && isUuid(roomDetails[1])) {
       const result=await getPublicRoom(pool,userId,roomDetails[1]);
       return send(res,result.error?404:200,result);
+    }
+    if (req.method === 'DELETE' && roomDetails && isUuid(roomDetails[1])) {
+      const result = await changeSpecialRoom(pool, userId, roomDetails[1], 'archive');
+      return send(res, result.error ? 404 : 200, result);
+    }
+    const specialRoom = /^\/v1\/spaces\/([0-9a-f-]{36})\/(members|complete)(?:\/([0-9a-f-]{36}))?$/i.exec(url.pathname);
+    if (specialRoom && isUuid(specialRoom[1])) {
+      const [, roomId, action, memberId] = specialRoom;
+      let result;
+      if (req.method === 'GET' && action === 'members' && !memberId) {
+        result = await listSpecialRoomMembers(pool, userId, roomId);
+      } else if (req.method === 'DELETE' && action === 'members' && (!memberId || isUuid(memberId))) {
+        result = await changeSpecialRoom(pool, userId, roomId, 'remove', memberId);
+      } else if (req.method === 'POST' && action === 'complete' && !memberId) {
+        result = await changeSpecialRoom(pool, userId, roomId, 'complete');
+      }
+      if (result) return send(res, result.error ? 404 : 200, result);
     }
     const publish = /^\/v1\/spaces\/([0-9a-f-]{36})\/publish$/i.exec(url.pathname);
     if (req.method === 'POST' && publish && isUuid(publish[1])) {

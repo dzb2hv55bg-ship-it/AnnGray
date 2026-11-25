@@ -7,7 +7,7 @@
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <application android:name=".MomentoApplication"
         android:allowBackup="false"
-        android:label="MOMENTO"
+        android:label="${momentoAppLabel}"
         android:supportsRtl="true"
         android:theme="@style/Theme.Momento">
         <activity
@@ -18,6 +18,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.films"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/film_share_paths" />
+        </provider>
         <receiver android:name=".data.RoomAlarmReceiver" android:exported="false" />
         <receiver android:name=".data.RoomBootReceiver" android:enabled="true" android:exported="false">
             <intent-filter>

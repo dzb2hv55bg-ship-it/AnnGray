@@ -24,10 +24,14 @@ export async function attachMoment(pool,userId,spaceId,momentId) {
   const client=await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query('SELECT id FROM spaces WHERE id=$1 FOR UPDATE', [spaceId]);
     const permitted=await client.query(`SELECT s.id,s.visibility,s.published_at,s.owner_id FROM spaces s
       JOIN moments m ON m.id=$3 AND m.owner_id=$2 AND m.deleted_at IS NULL
       JOIN media_assets a ON a.id=m.media_asset_id AND a.status='READY'
-      WHERE s.id=$1 AND s.owner_id=$2 AND s.archived_at IS NULL AND s.completed_at IS NULL
+      WHERE s.id=$1 AND s.archived_at IS NULL AND s.completed_at IS NULL
+        AND (s.owner_id=$2 OR (s.kind IN ('EVENT', 'SECRET') AND EXISTS (
+          SELECT 1 FROM space_members sm WHERE sm.space_id=s.id AND sm.user_id=$2)))
+        AND (s.kind <> 'EVENT' OR now() BETWEEN s.event_starts_at AND s.event_ends_at)
       FOR UPDATE OF s`,[spaceId,userId,momentId]);
     if (!permitted.rowCount) {await client.query('ROLLBACK');return {error:'FORBIDDEN_OR_MISSING'};}
     await client.query(`INSERT INTO moment_audiences(moment_id,space_id,granted_by)
@@ -109,7 +113,7 @@ export async function getSubscriptionUpdates(pool,userId,limit=30) {
 
 export async function getPublicRoom(pool,userId,spaceId) {
   const r=await pool.query(`SELECT s.id,s.name,s.description,s.kind,s.visibility,s.join_policy,
-      s.owner_id,s.created_at,s.published_at,s.completed_at,u.display_name AS author_name,
+      s.owner_id,s.created_at,s.published_at,s.completed_at,s.event_starts_at,s.event_ends_at,u.display_name AS author_name,
       (SELECT COUNT(*)::int FROM room_subscriptions rs WHERE rs.space_id=s.id) AS subscriber_count
     FROM spaces s JOIN users u ON u.id=s.owner_id
     WHERE s.id=$2 AND s.archived_at IS NULL AND
@@ -118,4 +122,19 @@ export async function getPublicRoom(pool,userId,spaceId) {
       AND NOT EXISTS(SELECT 1 FROM user_blocks b WHERE
         (b.blocker_id=$1 AND b.blocked_id=s.owner_id) OR (b.blocker_id=s.owner_id AND b.blocked_id=$1))`,[userId,spaceId]);
   return r.rowCount ? {room:r.rows[0]} : {error:'ROOM_UNAVAILABLE'};
+}
+
+export async function authorizedVideoKey(pool, userId, momentId) {
+  const result = await pool.query(`SELECT a.storage_key FROM moments m
+        JOIN media_assets a ON a.id=m.media_asset_id AND a.status='READY'
+        WHERE m.id=$2 AND m.deleted_at IS NULL AND m.moderation='VISIBLE'
+          AND (m.owner_id=$1 OR EXISTS(
+            SELECT 1 FROM moment_audiences ma JOIN spaces s ON s.id=ma.space_id
+            WHERE ma.moment_id=m.id AND s.archived_at IS NULL
+              AND (EXISTS(SELECT 1 FROM space_members sm WHERE sm.space_id=s.id AND sm.user_id=$1)
+                OR (s.visibility='PUBLIC' AND s.published_at IS NOT NULL))
+              AND NOT EXISTS(SELECT 1 FROM user_blocks b WHERE
+                (b.blocker_id=$1 AND b.blocked_id IN (s.owner_id, m.owner_id)) OR
+                (b.blocker_id IN (s.owner_id, m.owner_id) AND b.blocked_id=$1))))`,[userId, momentId]);
+  return result.rows[0]?.storage_key ?? null;
 }
