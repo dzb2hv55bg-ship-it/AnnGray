@@ -38,6 +38,34 @@ class MomentQueueRecoveryTest {
         } finally { file.delete(); context.deleteDatabase(LocalMomentDatabase.databaseNameForAccount(owner)) }
     }
 
+    @Test fun sharedRoomDestinationSurvivesReopenAndDoesNotCrossAccounts() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val owner = UUID.randomUUID().toString()
+        val other = UUID.randomUUID().toString()
+        val room = UUID.randomUUID().toString()
+        val file = File(context.filesDir, "room_queue_test_${UUID.randomUUID()}.mp4")
+        file.writeBytes(byteArrayOf(1, 2, 3))
+        try {
+            val momentId = LocalMomentDatabase(context, owner).use { db ->
+                db.insertMoment(file, 3000).id.also { db.queueSharedRoomMoment(it, room) }
+            }
+            LocalMomentDatabase(context, owner).use { db ->
+                assertEquals(listOf(momentId to room), db.sharedRoomSyncItems())
+                val requestId = requireNotNull(db.queuedMoments().single().uploadRequestId)
+                db.completeUpload(momentId, requestId, UUID.randomUUID().toString())
+                assertEquals(listOf(momentId to room), db.sharedRoomSyncItems())
+                db.setRoomSyncPhase(momentId, "DONE")
+                assertTrue(db.sharedRoomSyncItems().isEmpty())
+                assertTrue(file.exists())
+            }
+            LocalMomentDatabase(context, other).use { db -> assertTrue(db.sharedRoomSyncItems().isEmpty()) }
+        } finally {
+            file.delete()
+            context.deleteDatabase(LocalMomentDatabase.databaseNameForAccount(owner))
+            context.deleteDatabase(LocalMomentDatabase.databaseNameForAccount(other))
+        }
+    }
+
     @Test fun differentAccountCannotSeeQueuedMoments() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val a = UUID.randomUUID().toString()

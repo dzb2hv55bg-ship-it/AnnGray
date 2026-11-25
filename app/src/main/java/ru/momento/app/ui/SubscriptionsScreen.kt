@@ -11,7 +11,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
-import java.security.MessageDigest
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import ru.momento.app.network.MomentoApiException
 import java.io.File
 import androidx.compose.foundation.lazy.LazyColumn
@@ -124,7 +125,10 @@ fun SubscriptionsScreen(accessToken: String, api: MomentoApiClient, onOpenRoom: 
 }
 
 @Composable
-fun PublicRoomScreen(accessToken: String, roomId: String, api: MomentoApiClient, onBack: () -> Unit) {
+fun PublicRoomScreen(
+    accessToken: String, roomId: String, api: MomentoApiClient,
+    sharedRoom: Boolean = false, onBack: () -> Unit
+) {
     var moments by remember(roomId) { mutableStateOf<List<RemoteMoment>>(emptyList()) }
     var error by remember(roomId) { mutableStateOf<String?>(null) }
     var loading by remember(roomId) { mutableStateOf(true) }
@@ -135,6 +139,10 @@ fun PublicRoomScreen(accessToken: String, roomId: String, api: MomentoApiClient,
     var paused by remember(roomId) { mutableStateOf(false) }
     var muted by remember(roomId) { mutableStateOf(false) }
     var videoRetry by remember(roomId) { mutableIntStateOf(0) }
+    var videoError by remember(roomId) { mutableStateOf<String?>(null) }
+    val playbackFolder = remember(context, roomId) {
+        File(context.cacheDir, "room-playback-${java.util.UUID.randomUUID()}").apply { mkdir() }
+    }
     val player = remember(context, roomId) { ExoPlayer.Builder(context).build() }
     DisposableEffect(player) {
         val listener = object : Player.Listener {
@@ -150,8 +158,7 @@ fun PublicRoomScreen(accessToken: String, roomId: String, api: MomentoApiClient,
             player.removeListener(listener)
             player.release()
             // Server video cache is temporary; never leave private clips on disk after viewing.
-            context.cacheDir.listFiles()?.filter { it.name.startsWith("momento_") && it.name.endsWith(".mp4") }
-                ?.forEach { it.delete() }
+            playbackFolder.deleteRecursively()
         }
     }
     LaunchedEffect(paused, muted, player) {
@@ -159,16 +166,14 @@ fun PublicRoomScreen(accessToken: String, roomId: String, api: MomentoApiClient,
         player.volume = if (muted) 0f else 1f
     }
 
-    var videoError by remember(roomId) { mutableStateOf<String?>(null) }
-    LaunchedEffect(roomId, currentIndex, moments, accessToken, videoRetry) {
+    val selected = moments.getOrNull(currentIndex)
+    LaunchedEffect(roomId, selected?.id, accessToken, videoRetry) {
         player.stop(); player.clearMediaItems()
+        cachedVideo?.delete()
         cachedVideo = null
         videoError = null
-        val selected = moments.getOrNull(currentIndex) ?: return@LaunchedEffect
-        // Never share cached private video across accounts. The token itself is not logged or stored.
-        val identity = if (accessToken.isBlank()) "guest" else MessageDigest.getInstance("SHA-256")
-            .digest(accessToken.toByteArray()).joinToString("") { "%02x".format(it) }.take(24)
-        val file = File(context.cacheDir, "momento_${identity}_${selected.id}.mp4")
+        if (selected == null) return@LaunchedEffect
+        val file = File(playbackFolder, "${selected.id}.mp4")
         try {
             // Always reauthorize server videos, including previously cached private videos.
             // Offline playback of private server content is deliberately disabled.
@@ -178,29 +183,48 @@ fun PublicRoomScreen(accessToken: String, roomId: String, api: MomentoApiClient,
             player.prepare()
             player.playWhenReady = !paused
         }
-        catch (e: Exception) {
+        catch (e: CancellationException) {
+            file.delete()
+            throw e
+        } catch (e: Exception) {
             videoError = if (e is MomentoApiException && e.statusCode == 401) "Сессия истекла. Войди снова"
                 else e.message ?: "Не удалось получить видео"
         }
     }
-    LaunchedEffect(roomId, retry) {
+    LaunchedEffect(roomId, accessToken, retry) {
         loading = true
-        error = null
-        try { moments = api.getSpaceTimeline(accessToken, roomId).items.reversed() }
-        catch (e: Exception) { error = e.message ?: "Ошибка загрузки комнаты" }
-        finally { loading = false }
+        do {
+            try {
+                val page = api.getSpaceTimeline(accessToken, roomId, limit = if (sharedRoom) 50 else 20)
+                val updated = page.items.asReversed()
+                val currentId = moments.getOrNull(currentIndex)?.id
+                val index = updated.indexOfFirst { it.id == currentId }
+                currentIndex = index.coerceAtLeast(0)
+                moments = updated
+                error = null
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                moments = emptyList()
+                currentIndex = 0
+                error = failure.message ?: "Ошибка загрузки комнаты"
+            } finally {
+                loading = false
+            }
+            if (sharedRoom) delay(15_000)
+        } while (sharedRoom)
     }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        TextButton(onClick = onBack) { Text(if (accessToken.isBlank()) "Назад к комнатам" else "Назад к подпискам") }
+        TextButton(onClick = onBack) { Text(if (sharedRoom || accessToken.isBlank()) "Назад к комнатам" else "Назад к подпискам") }
         MomentoScreenHeading("Моменты комнаты")
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         error?.let { MomentoStatePanel("Не удалось получить влог", it, "Повторить", { retry++ }, isError = true) }
         if (!loading && error == null) {
             if (moments.isEmpty()) MomentoStatePanel("Пока нет моментов", "В этой комнате ещё нет доступных записей.")
             else {
-                val selected = moments[currentIndex.coerceIn(moments.indices)]
+                val activeMoment = moments[currentIndex.coerceIn(moments.indices)]
                 Text("Момент ${currentIndex + 1} из ${moments.size}")
-                Text("${selected.capturedAt} · ${selected.authorDisplayName}")
+                Text("${activeMoment.capturedAt} · ${activeMoment.authorDisplayName}")
                 videoError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 val file = cachedVideo
                 if (file != null) {
@@ -208,7 +232,7 @@ fun PublicRoomScreen(accessToken: String, roomId: String, api: MomentoApiClient,
                         useController = false
                         this.player = player
                     } }, update = { it.player = player },
-                        modifier = Modifier.fillMaxWidth().height(380.dp).pointerInput(currentIndex) {
+                        modifier = Modifier.fillMaxWidth().weight(1f).pointerInput(currentIndex) {
                             var drag = 0f
                             detectHorizontalDragGestures(onHorizontalDrag = { _, dx -> drag += dx }, onDragEnd = {
                                 if (drag < -60f && currentIndex < moments.lastIndex) currentIndex++

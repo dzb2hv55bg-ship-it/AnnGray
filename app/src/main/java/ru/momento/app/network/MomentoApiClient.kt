@@ -112,6 +112,7 @@ class MomentoApiClient(
         require(base.startsWith("https://")) { "Для видео требуется HTTPS" }
         val connection = (URL("$base/v1/moments/${momentId.asUuidPathSegment()}/video")
             .openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects = false
             requestMethod = "GET"
             connectTimeout = 10_000
             readTimeout = 30_000
@@ -187,6 +188,40 @@ class MomentoApiClient(
             .put("joinPolicy",if (visibility == "PUBLIC") "OPEN" else "INVITE_ONLY")
         request("POST","/v1/spaces",accessToken,body).getString("id")
     }
+
+    suspend fun createSpecialRoom(
+        token: String, requestId: String, kind: String, name: String, description: String,
+        startsAt: String?, endsAt: String?, public: Boolean
+    ): RemoteSpace = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("clientRoomId", requestId.asUuidPathSegment())
+            .put("kind", kind).put("name", name).put("description", description)
+            .put("visibility", if (public) "PUBLIC" else "PRIVATE")
+            .put("joinPolicy", "INVITE_ONLY")
+        if (startsAt != null && endsAt != null) {
+            body.put("eventStartsAt", startsAt).put("eventEndsAt", endsAt)
+        }
+        request("POST", "/v1/spaces", token, body).toRemoteSpace()
+    }
+
+    suspend fun specialRoomDetails(token: String, roomId: String): JSONObject = withContext(Dispatchers.IO) {
+        request("GET", "/v1/spaces/${roomId.asUuidPathSegment()}", token).getJSONObject("room")
+    }
+
+    suspend fun specialRoomMembers(token: String, roomId: String): JSONArray = withContext(Dispatchers.IO) {
+        request("GET", "/v1/spaces/${roomId.asUuidPathSegment()}/members", token).getJSONArray("items")
+    }
+
+    suspend fun changeSpecialRoom(token: String, roomId: String, action: String, memberId: String? = null) =
+        withContext(Dispatchers.IO) {
+            val roomPath = "/v1/spaces/${roomId.asUuidPathSegment()}"
+            when (action) {
+                "archive" -> request("DELETE", roomPath, token)
+                "complete" -> request("POST", "$roomPath/complete", token)
+                "leave" -> request("DELETE", "$roomPath/members", token)
+                "remove" -> request("DELETE", "$roomPath/members/${requireNotNull(memberId).asUuidPathSegment()}", token)
+                else -> error("Unknown room operation")
+            }
+        }
 
     suspend fun createPrivateCircle(accessToken: String, name: String): RemoteSpace = withContext(Dispatchers.IO) {
         val cleanName = name.trim()
@@ -306,6 +341,7 @@ class MomentoApiClient(
         val normalizedBase = baseUrl.trimEnd('/')
         require(normalizedBase.startsWith("https://")) { "Для API разрешён только HTTPS" }
         val connection = (URL(normalizedBase + "/v1/me/moments/upload").openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects = false
             requestMethod = "POST"
             connectTimeout = 10_000
             readTimeout = 45_000
@@ -348,6 +384,7 @@ class MomentoApiClient(
         val normalizedBase = baseUrl.trimEnd('/')
         require(normalizedBase.startsWith("https://")) { "Для API разрешён только HTTPS" }
         val connection = (URL(normalizedBase + path).openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects = false
             requestMethod = method
             connectTimeout = 10_000
             readTimeout = 15_000

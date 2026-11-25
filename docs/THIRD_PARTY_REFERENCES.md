@@ -22,3 +22,11 @@ Before copying any code from a repository:
 3. Record the origin and copyright notice.
 4. Check whether dependencies bring additional license obligations.
 5. Add required notices to the app's third-party notices.
+
+## MOMENTO 0.55
+
+| Reference | Use | License |
+|---|---|---|
+| [AndroidX Media 1.8.0](https://github.com/androidx/media/tree/1.8.0) and [Transformer](https://developer.android.com/media/media3/transformer) | MP4 export from a chronological composition. The Android module uses the same Media3 version for Transformer and ExoPlayer. | [Apache-2.0](https://github.com/androidx/media/blob/1.8.0/LICENSE) |
+| [Android secure file sharing](https://developer.android.com/training/secure-file-sharing) | FileProvider grants read access to the selected copy via the Android Sharesheet. | Android platform guidance |
+| [Android emulator runner](https://github.com/ReactiveCircus/android-emulator-runner/tree/v2) | API 35 instrumentation in the offline Android CI job. | [MIT](https://github.com/ReactiveCircus/android-emulator-runner/blob/v2/LICENSE) |

@@ -80,7 +80,7 @@ import java.util.Date
 import java.util.Locale
 
 private enum class Tab(val label: String) {
-    SPACES("Комнаты"), SUBSCRIPTIONS("Подписки"), CREATE("Создать"), MINE("Мои"), SEARCH("Поиск"), PROFILE("Профиль"), ARCHIVE("Архив"), CALENDAR("Календарь"), CAPSULES("Капсулы"), RECORD("Момент"), ROOM_DETAIL("Комната"), ROOM_PLAYER("Просмотр")
+    SPACES("Комнаты"), SPECIAL_ROOMS("События и секретные комнаты"), SPECIAL_RECORD("Запись в комнату"), SUBSCRIPTIONS("Подписки"), CREATE("Создать"), MINE("Мои"), SEARCH("Поиск"), PROFILE("Профиль"), ARCHIVE("Архив"), CALENDAR("Календарь"), FILM("Жизнь в секундах"), CAPSULES("Капсулы"), RECORD("Момент"), ROOM_DETAIL("Комната"), ROOM_PLAYER("Просмотр")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -201,6 +201,8 @@ fun MomentoApp() {
     var uploadingMomentId by remember(accountId) { mutableStateOf<String?>(null) }
     val localSpaces = remember(accountId) { mutableStateListOf<LocalSpace>() }
     var publicRoomId by remember(accountId) { mutableStateOf<String?>(null) }
+    var sharedRoomId by rememberSaveable(accountId) { mutableStateOf<String?>(null) }
+    var sharedRoomName by rememberSaveable(accountId) { mutableStateOf("") }
     var activeRoomId by rememberSaveable(accountId) { mutableStateOf<String?>(initialRoom) }
     var activeRoomLinks by remember(accountId) { mutableStateOf(emptyList<ru.momento.app.data.RoomMomentLink>()) }
     fun refreshRoomLinks(roomId: String) {
@@ -213,7 +215,7 @@ fun MomentoApp() {
     }
     // Resume only owner-approved QUEUED uploads; no automatic publication to rooms.
     LaunchedEffect(database, accountId) {
-        val queued = withContext(Dispatchers.IO) { database.queuedMoments().isNotEmpty() }
+        val queued = withContext(Dispatchers.IO) { database.queuedMoments().isNotEmpty() || database.sharedRoomSyncItems().isNotEmpty() }
         if (queued) ru.momento.app.data.MomentUploadWorker.enqueue(context, accountId)
     }
     LaunchedEffect(database) {
@@ -262,7 +264,13 @@ fun MomentoApp() {
         },
         bottomBar = {
             val mainTabs = listOf(Tab.RECORD, Tab.SPACES, Tab.SUBSCRIPTIONS, Tab.PROFILE)
-            MomentoNavigationBar(mainTabs.indexOf(selectedTab).coerceAtLeast(0)) { index ->
+            val mainTab = when (selectedTab) {
+                Tab.ARCHIVE, Tab.CALENDAR, Tab.FILM, Tab.CAPSULES -> Tab.PROFILE
+                Tab.CREATE, Tab.MINE, Tab.SEARCH, Tab.SPECIAL_ROOMS, Tab.SPECIAL_RECORD,
+                Tab.ROOM_DETAIL, Tab.ROOM_PLAYER -> Tab.SPACES
+                else -> selectedTab
+            }
+            MomentoNavigationBar(mainTabs.indexOf(mainTab)) { index ->
                 selectedTab = mainTabs[index]
             }
         }
@@ -272,14 +280,53 @@ fun MomentoApp() {
                 Text(message, color = MaterialTheme.colorScheme.error, modifier = Modifier.fillMaxWidth().padding(12.dp))
             }
             when (selectedTab) {
-            Tab.SPACES -> LiveHomeScreen(
-                rooms = localSpaces,
-                activeRoomId = activeRoomId,
-                onRecord = { selectedTab = Tab.RECORD },
-                onCreate = { selectedTab = Tab.CREATE },
-                onMine = { selectedTab = Tab.MINE },
-                onOpen = ::openRoom
-            )
+            Tab.SPACES -> {
+                TextButton(onClick = { selectedTab = Tab.SPECIAL_ROOMS }) { Text("События и секретные комнаты") }
+                LiveHomeScreen(
+                    rooms = localSpaces,
+                    activeRoomId = activeRoomId,
+                    onRecord = { selectedTab = Tab.RECORD },
+                    onCreate = { selectedTab = Tab.CREATE },
+                    onMine = { selectedTab = Tab.MINE },
+                    onOpen = ::openRoom
+                )
+            }
+            Tab.SPECIAL_ROOMS -> androidx.compose.runtime.key(accountId) {
+                SpecialRoomsScreen(authSession?.accessToken.orEmpty(), accountId, uploadClient, onRecord = { id, name ->
+                    sharedRoomId = id
+                    sharedRoomName = name
+                    selectedTab = Tab.SPECIAL_RECORD
+                }, onBack = { selectedTab = Tab.SPACES })
+            }
+            Tab.SPECIAL_RECORD -> {
+                val destination = sharedRoomId
+                if (destination == null) {
+                    TextButton(onClick = { selectedTab = Tab.SPECIAL_ROOMS }) { Text("К комнатам") }
+                } else CameraScreen(
+                    verifiedOwnerId = accountId,
+                    roomNames = listOf(destination to sharedRoomName),
+                    selectedRoomId = destination,
+                    onSaved = { file, duration ->
+                        scope.launch {
+                            val saved = runCatching {
+                                withContext(Dispatchers.IO) {
+                                    val moment = database.insertMoment(file, duration)
+                                    database.queueSharedRoomMoment(moment.id, destination)
+                                    moment
+                                }
+                            }
+                            saved.onSuccess {
+                                savedMoments.add(0, it)
+                                ru.momento.app.data.MomentUploadWorker.enqueue(context, accountId)
+                                selectedTab = Tab.SPECIAL_ROOMS
+                            }.onFailure {
+                                archiveError = "Видео осталось на устройстве. Не удалось поставить его в очередь комнаты."
+                            }
+                        }
+                    },
+                    onClose = { selectedTab = Tab.SPECIAL_ROOMS }
+                )
+            }
             Tab.SUBSCRIPTIONS -> {
                 val opened = publicRoomId
                 if (opened == null) SubscriptionsScreen(authSession!!.accessToken, uploadClient,
@@ -361,6 +408,9 @@ fun MomentoApp() {
                 }
             }
             Tab.CALENDAR -> LifeCalendarScreen(savedMoments)
+            Tab.FILM -> androidx.compose.runtime.key(accountId) {
+                LifeFilmScreen(accountId, savedMoments) { selectedTab = Tab.PROFILE }
+            }
             Tab.CAPSULES -> CapsulesScreen(authSession?.accessToken.orEmpty(), remember { ru.momento.app.network.MomentoApiClient() })
             Tab.RECORD -> CameraScreen(
                 verifiedOwnerId = accountId,
@@ -453,6 +503,7 @@ fun MomentoApp() {
                 item { MomentoSectionTitle("Мои материалы") }
                 item { Button(onClick = { selectedTab = Tab.ARCHIVE }) { Text("Личный архив моментов") } }
                 item { Button(onClick = { selectedTab = Tab.CALENDAR }) { Text("Календарь жизни") } }
+                item { Button(onClick = { selectedTab = Tab.FILM }) { Text("Жизнь в секундах") } }
                 item { Button(onClick = { selectedTab = Tab.CAPSULES }) { Text("Капсулы времени") } }
                 item { MomentoPrimaryAction("Записать личный момент", onClick = { activeRoomId = null; selectedTab = Tab.RECORD }) }
                 /* Button(onClick = { activeRoomId = null; selectedTab = Tab.RECORD }) { Text("Записать личный момент") }

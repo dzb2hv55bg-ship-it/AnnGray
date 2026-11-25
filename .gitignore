@@ -8,3 +8,6 @@
 *.jks
 *.apk
 .env
+
+backend/node_modules/
+/.kotlin/

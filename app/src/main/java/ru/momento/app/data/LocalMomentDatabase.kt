@@ -82,6 +82,32 @@ class LocalMomentDatabase(context: Context, private val accountId: String) : SQL
     }
 
     @Synchronized
+    fun queueSharedRoomMoment(momentId: String, remoteRoomId: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            queueUpload(momentId)
+            check(db.update("moments", ContentValues().apply {
+                put("sync_room_id", remoteRoomId)
+                put("sync_phase", "SHARED_PENDING")
+            }, "id=? AND sync_room_id IS NULL", arrayOf(momentId)) == 1)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    @Synchronized
+    fun sharedRoomSyncItems(): List<Pair<String, String>> = buildList {
+        readableDatabase.rawQuery(
+            "SELECT id,sync_room_id FROM moments WHERE sync_phase='SHARED_PENDING' ORDER BY captured_at_ms,id",
+            null
+        ).use { cursor ->
+            while (cursor.moveToNext()) add(cursor.getString(0) to cursor.getString(1))
+        }
+    }
+
+    @Synchronized
     fun setRoomSyncPhase(momentId: String, phase: String) {
         require(phase in setOf("QUEUED","ATTACHED","DONE","FAILED"))
         writableDatabase.update("moments",ContentValues().apply { put("sync_phase",phase) },"id=?",arrayOf(momentId))

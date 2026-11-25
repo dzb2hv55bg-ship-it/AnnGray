@@ -44,8 +44,8 @@ android {
         minSdk = 24
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 37
-        versionName = "0.54.3"
+        versionCode = 38
+        versionName = "0.55.0"
         buildConfigField("String", "MOMENTO_API_BASE_URL", "\"$escapedMomentoApiBaseUrl\"")
         buildConfigField("boolean", "MOMENTO_API_CONFIGURED", apiConfigured.toString())
         buildConfigField("String", "GOOGLE_SERVER_CLIENT_ID", "\"$googleServerClientId\"")
@@ -110,6 +110,7 @@ dependencies {
     implementation(libs.androidx.camera.video)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
+    implementation(libs.androidx.media3.transformer)
     implementation(libs.androidx.camera.view)
 
     implementation(platform(libs.androidx.compose.bom))

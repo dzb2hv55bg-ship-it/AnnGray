@@ -114,7 +114,8 @@ object RoomAlarmScheduler {
         migrateLegacy(context)
         val data = load(context)
         if (roomId.isNullOrBlank()) {
-            data.remove("targetRoom").remove("targetName")
+            data.remove("targetRoom")
+            data.remove("targetName")
         } else {
             data.put("targetRoom", roomId).put("targetName", roomName.orEmpty())
         }
@@ -125,7 +126,8 @@ object RoomAlarmScheduler {
         migrateLegacy(context)
         val data = load(context)
         if (data.optString("targetRoom") !in activeRoomIds) {
-            data.remove("targetRoom").remove("targetName")
+            data.remove("targetRoom")
+            data.remove("targetName")
             save(context, data)
         }
         reschedule(context)

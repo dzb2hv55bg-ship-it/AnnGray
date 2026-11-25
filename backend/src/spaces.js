@@ -1,6 +1,6 @@
 import { createInviteToken, hashInviteToken } from './security.js';
 
-const SPACE_KINDS = new Set(['CIRCLE', 'INTEREST_ROOM']);
+const SPACE_KINDS = new Set(['CIRCLE', 'INTEREST_ROOM', 'EVENT', 'SECRET']);
 const VISIBILITIES = new Set(['PRIVATE', 'PUBLIC']);
 const JOIN_POLICIES = new Set(['INVITE_ONLY', 'OPEN', 'APPROVAL']);
 
@@ -8,8 +8,8 @@ export function validateCreateSpace(body) {
   const name = typeof body?.name === 'string' ? body.name.trim() : '';
   const description = typeof body?.description === 'string' ? body.description.trim() : '';
   const kind = body?.kind;
-  const visibility = body?.visibility;
-  const joinPolicy = body?.joinPolicy;
+  const visibility = body?.visibility ?? (['EVENT', 'SECRET'].includes(kind) ? 'PRIVATE' : undefined);
+  const joinPolicy = body?.joinPolicy ?? (['EVENT', 'SECRET'].includes(kind) ? 'INVITE_ONLY' : undefined);
   if (name.length < 2 || name.length > 60) return { error: 'name must contain 2–60 characters' };
   if (description.length > 500) return { error: 'description must be at most 500 characters' };
   if (!SPACE_KINDS.has(kind) || !VISIBILITIES.has(visibility) || !JOIN_POLICIES.has(joinPolicy)) {
@@ -18,7 +18,28 @@ export function validateCreateSpace(body) {
   if (visibility === 'PRIVATE' && joinPolicy !== 'INVITE_ONLY') {
     return { error: 'private rooms must use INVITE_ONLY' };
   }
-  return { value: { name, description, kind, visibility, joinPolicy } };
+  if (kind === 'SECRET' && visibility !== 'PRIVATE') {
+    return { error: 'secret rooms must be private' };
+  }
+  const value = { name, description, kind, visibility, joinPolicy };
+  if (kind === 'EVENT') {
+    const start = parseEventDate(body.eventStartsAt);
+    const end = parseEventDate(body.eventEndsAt);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
+      return { error: 'event dates must be ordered ISO date-times with a time zone' };
+    }
+    value.eventStartsAt = new Date(start).toISOString();
+    value.eventEndsAt = new Date(end).toISOString();
+  }
+  return { value };
+}
+
+function parseEventDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return NaN;
+  const date = value.slice(0, 10);
+  const calendarDate = new Date(date + 'T00:00:00Z');
+  if (!Number.isFinite(calendarDate.getTime()) || calendarDate.toISOString().slice(0, 10) !== date) return NaN;
+  return Date.parse(value);
 }
 
 export async function createSpace(pool, userId, input, clientRoomId = null) {
@@ -27,16 +48,16 @@ export async function createSpace(pool, userId, input, clientRoomId = null) {
     await client.query('BEGIN');
     if (clientRoomId) {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [userId+':'+clientRoomId]);
-      const existing = await client.query(`SELECT s.id,s.name,s.description,s.kind,s.visibility,s.join_policy,s.created_at
+      const existing = await client.query(`SELECT s.id,s.name,s.description,s.kind,s.visibility,s.join_policy,s.created_at,s.event_starts_at,s.event_ends_at,s.completed_at
         FROM room_creation_keys k JOIN spaces s ON s.id=k.space_id
         WHERE k.user_id=$1 AND k.client_room_id=$2 FOR UPDATE OF k`, [userId,clientRoomId]);
       if (existing.rowCount) { await client.query('COMMIT'); return {...existing.rows[0],memberCount:1,replayed:true}; }
     }
     const result = await client.query(
-      `INSERT INTO spaces (owner_id, name, description, kind, visibility, join_policy)
-       VALUES ($1, $2, $3, $4::space_kind, $5::space_visibility, $6::join_policy)
-       RETURNING id, name, description, kind, visibility, join_policy, created_at`,
-      [userId, input.name, input.description, input.kind, input.visibility, input.joinPolicy],
+      `INSERT INTO spaces (owner_id, name, description, kind, visibility, join_policy, event_starts_at, event_ends_at)
+       VALUES ($1, $2, $3, $4::space_kind, $5::space_visibility, $6::join_policy, $7, $8)
+       RETURNING id, name, description, kind, visibility, join_policy, created_at, event_starts_at, event_ends_at, completed_at`,
+      [userId, input.name, input.description, input.kind, input.visibility, input.joinPolicy, input.eventStartsAt ?? null, input.eventEndsAt ?? null],
     );
     const space = result.rows[0];
     await client.query(
@@ -57,7 +78,7 @@ export async function createSpace(pool, userId, input, clientRoomId = null) {
 export async function listSpaces(pool, userId) {
   const result = await pool.query(
     `SELECT s.id, s.name, s.description, s.kind, s.visibility, s.join_policy,
-            s.created_at, COUNT(m.user_id)::int AS member_count
+            s.created_at, s.event_starts_at, s.event_ends_at, s.completed_at, COUNT(m.user_id)::int AS member_count
        FROM spaces s
        JOIN space_members mine ON mine.space_id = s.id AND mine.user_id = $1
        JOIN space_members m ON m.space_id = s.id
@@ -76,8 +97,11 @@ export async function createInvite(pool, userId, spaceId, expiresInHours, maxUse
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query(
+      "SELECT id FROM spaces WHERE id = $1 AND kind IN ('EVENT', 'SECRET') FOR UPDATE", [spaceId],
+    );
     const membership = await client.query(
-      `SELECT sm.role FROM space_members sm JOIN spaces s ON s.id = sm.space_id
+      `SELECT sm.role, s.kind FROM space_members sm JOIN spaces s ON s.id = sm.space_id
         WHERE sm.space_id = $1 AND sm.user_id = $2 AND s.archived_at IS NULL FOR SHARE OF sm`,
       [spaceId, userId],
     );
@@ -89,7 +113,7 @@ export async function createInvite(pool, userId, spaceId, expiresInHours, maxUse
       `INSERT INTO space_invites (space_id, created_by, token_hash, expires_at, max_uses)
        VALUES ($1, $2, $3, now() + ($4::int * interval '1 hour'), $5)
        RETURNING id, expires_at`,
-      [spaceId, userId, tokenHash, expiresInHours, maxUses],
+      [spaceId, userId, tokenHash, expiresInHours, membership.rows[0].kind === 'SECRET' ? 1 : maxUses],
     );
     await client.query('COMMIT');
     return { inviteId: inserted.rows[0].id, inviteUrl: `${publicBaseUrl.replace(/\/$/, '')}/invite/${token}`, expiresAt: inserted.rows[0].expires_at };
@@ -138,12 +162,18 @@ export async function acceptInvite(pool, userId, token) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const tokenHash = hashInviteToken(token);
+    // Serialize all redemptions for the room, including redemptions of different tokens.
+    await client.query(
+      `SELECT s.id FROM spaces s JOIN space_invites i ON i.space_id = s.id
+         WHERE i.token_hash = $1 AND s.kind IN ('EVENT', 'SECRET') FOR UPDATE OF s`, [tokenHash],
+    );
     const inviteResult = await client.query(
       `SELECT i.id, i.space_id, i.expires_at, i.max_uses, i.use_count, i.revoked_at,
-              s.age_policy_key, s.archived_at
+              s.kind, s.age_policy_key, s.archived_at
          FROM space_invites i JOIN spaces s ON s.id = i.space_id
         WHERE i.token_hash = $1 FOR UPDATE OF i`,
-      [hashInviteToken(token)],
+      [tokenHash],
     );
     if (!inviteResult.rowCount) {
       await client.query('ROLLBACK');
@@ -176,6 +206,17 @@ export async function acceptInvite(pool, userId, token) {
       return age;
     }
 
+    if (invite.kind === 'SECRET') {
+      const capacity = await client.query(
+        `SELECT COUNT(*)::int AS count, COALESCE(bool_or(user_id = $2), false) AS already_member
+           FROM space_members WHERE space_id = $1`, [invite.space_id, userId],
+      );
+      const { count, already_member: alreadyMember } = capacity.rows[0];
+      if (count >= 2 && !alreadyMember) {
+        await client.query('ROLLBACK');
+        return { error: 'INVITE_UNAVAILABLE' };
+      }
+    }
     const membershipInsert = await client.query(
       `INSERT INTO space_members (space_id, user_id, role) VALUES ($1, $2, 'MEMBER')
        ON CONFLICT (space_id, user_id) DO NOTHING`,
@@ -202,7 +243,7 @@ export async function discoverSpaces(pool, userId, query = '', limit = 30) {
   const cleanQuery = query.trim().slice(0, 80).replace(/[\\%_]/g, (character) => `\\${character}`);
   const result = await pool.query(
     `SELECT s.id, s.name, s.description, s.kind, s.visibility, s.join_policy,
-            s.created_at, COUNT(sm.user_id)::int AS member_count,
+            s.created_at, s.event_starts_at, s.event_ends_at, s.completed_at, COUNT(sm.user_id)::int AS member_count,
             EXISTS (SELECT 1 FROM space_members mine WHERE mine.space_id = s.id AND mine.user_id = $1) AS is_member,
             EXISTS (SELECT 1 FROM join_requests jr WHERE jr.space_id = s.id AND jr.user_id = $1 AND jr.status = 'PENDING') AS request_pending
        FROM spaces s
@@ -389,19 +430,69 @@ export async function getRoomTimeline(pool, userId, spaceId, before, beforeId, l
     `SELECT mo.id, mo.owner_id, mo.captured_at::text AS captured_at, mo.duration_ms, mo.caption,
             u.display_name
        FROM moment_audiences ma
+       JOIN spaces s ON s.id = ma.space_id AND s.archived_at IS NULL
        JOIN moments mo ON mo.id = ma.moment_id
        JOIN users u ON u.id = mo.owner_id
        JOIN media_assets media ON media.id = mo.media_asset_id
       WHERE ma.space_id = $1 AND mo.deleted_at IS NULL
         AND mo.moderation = 'VISIBLE' AND media.status = 'READY'
+        AND (EXISTS (SELECT 1 FROM space_members sm WHERE sm.space_id = s.id AND sm.user_id = $5)
+          OR (s.visibility = 'PUBLIC' AND s.published_at IS NOT NULL))
+        AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+          (b.blocker_id = $5 AND b.blocked_id IN (s.owner_id, mo.owner_id))
+          OR (b.blocked_id = $5 AND b.blocker_id IN (s.owner_id, mo.owner_id)))
         AND ($2::timestamptz IS NULL OR (mo.captured_at, mo.id) < ($2::timestamptz, $3::uuid))
       ORDER BY mo.captured_at DESC, mo.id DESC
       LIMIT $4`,
-    [spaceId, before ?? null, beforeId ?? null, limit],
+    [spaceId, before ?? null, beforeId ?? null, limit, userId],
   );
   const last = result.rows.at(-1);
   return {
     items: result.rows,
     nextCursor: last ? { before: last.captured_at, beforeId: last.id } : null,
   };
+}
+
+export async function listSpecialRoomMembers(pool, userId, spaceId) {
+  const result = await pool.query(
+    `SELECT sm.user_id, sm.role, u.display_name
+       FROM spaces s
+       JOIN space_members viewer ON viewer.space_id = s.id AND viewer.user_id = $2
+       JOIN space_members sm ON sm.space_id = s.id
+       JOIN users u ON u.id = sm.user_id AND u.deleted_at IS NULL
+      WHERE s.id = $1 AND s.kind IN ('EVENT', 'SECRET') AND s.archived_at IS NULL
+      ORDER BY sm.joined_at, sm.user_id`, [spaceId, userId],
+  );
+  return result.rowCount ? { items: result.rows } : { error: 'ROOM_UNAVAILABLE' };
+}
+
+export async function changeSpecialRoom(pool, userId, spaceId, action, targetId = userId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const room = await client.query(
+      `SELECT kind, owner_id FROM spaces
+        WHERE id = $1 AND kind IN ('EVENT', 'SECRET') AND archived_at IS NULL FOR UPDATE`, [spaceId],
+    );
+    const space = room.rows[0];
+    const owner = space?.owner_id === userId;
+    let result;
+    if (space && action === 'remove' && (owner || targetId === userId) && targetId !== space.owner_id) {
+      result = await client.query('DELETE FROM space_members WHERE space_id = $1 AND user_id = $2', [spaceId, targetId]);
+      if (result.rowCount) {
+        await client.query('UPDATE space_invites SET revoked_at = now() WHERE space_id = $1 AND revoked_at IS NULL', [spaceId]);
+      }
+    } else if (owner && action === 'archive') {
+      result = await client.query('UPDATE spaces SET archived_at = now() WHERE id = $1', [spaceId]);
+    } else if (owner && action === 'complete' && space.kind === 'EVENT') {
+      result = await client.query('UPDATE spaces SET completed_at = COALESCE(completed_at, now()) WHERE id = $1', [spaceId]);
+    }
+    await client.query('COMMIT');
+    return result?.rowCount ? { success: true } : { error: 'ROOM_UNAVAILABLE' };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
