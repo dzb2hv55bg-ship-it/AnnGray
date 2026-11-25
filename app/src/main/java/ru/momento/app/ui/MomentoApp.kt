@@ -86,7 +86,7 @@ private enum class Tab(val label: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MomentoApp() {
-    val launchActivity = LocalContext.current as? android.app.Activity
+    val launchActivity = androidx.activity.compose.LocalActivity.current
     val initialRoom = launchActivity?.intent?.getStringExtra("record_room_id")
     var selectedTab by rememberSaveable { mutableStateOf(if (initialRoom != null) Tab.RECORD else Tab.SPACES) }
     var archiveError by rememberSaveable { mutableStateOf<String?>(null) }

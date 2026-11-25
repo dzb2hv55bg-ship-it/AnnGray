@@ -7,6 +7,7 @@ permissions:
   contents: read
 jobs:
   debug:
+    if: vars.MOMENTO_API_URL != ''
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -36,6 +37,9 @@ jobs:
       - name: Verify project
         run: bash scripts/verify_project.sh
       - name: Run available tests
+        env:
+          ORG_GRADLE_PROJECT_momentoAllowOfflinePreview: 'true'
+          ORG_GRADLE_PROJECT_momentoRequireLiveAuth: 'false'
         run: bash scripts/run_tests.sh
       - name: Require HTTPS API configuration before Android compilation
         env:
@@ -100,6 +104,8 @@ jobs:
       - run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'platform-tools' 'system-images;android-35;google_apis;x86_64'
       - run: bash scripts/restore_gradle_wrapper.sh
       - name: Run instrumented tests on emulator
+        env:
+          ORG_GRADLE_PROJECT_momentoApiBaseUrl: ${{ vars.MOMENTO_API_URL }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -112,6 +118,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
+      ORG_GRADLE_PROJECT_momentoApiBaseUrl: ${{ vars.MOMENTO_API_URL }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}

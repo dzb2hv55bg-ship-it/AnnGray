@@ -3,7 +3,9 @@ package ru.momento.app.data
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -17,6 +19,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import kotlinx.coroutines.CancellationException
+import ru.momento.app.MainActivity
 import ru.momento.app.network.MomentoApiClient
 import ru.momento.app.network.MomentoApiException
 import ru.momento.app.network.MomentoSessionRefresh
@@ -60,11 +63,17 @@ internal class SecretRoomNotifications(context: Context, params: WorkerParameter
                     if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(
                         NotificationChannel(CHANNEL, "Секретные комнаты", NotificationManager.IMPORTANCE_DEFAULT)
                     )
+                    val openApp = PendingIntent.getActivity(
+                        applicationContext, id.hashCode(),
+                        Intent(applicationContext, MainActivity::class.java),
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
                     manager.notify(id.hashCode(), NotificationCompat.Builder(applicationContext, CHANNEL)
                         .setSmallIcon(android.R.drawable.ic_popup_reminder)
                         .setContentTitle("MOMENTO")
                         .setContentText("Новый момент в секретной комнате")
                         .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                        .setContentIntent(openApp)
                         .setAutoCancel(true)
                         .build())
                 }
