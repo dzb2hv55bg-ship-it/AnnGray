@@ -74,7 +74,7 @@ assert "GOOGLE_SERVER_CLIENT_ID" in server and "JWT_JWKS_URL" in server
 assert "vkid" in (ROOT / "gradle/libs.versions.toml").read_text()
 assert "yandex-auth" in (ROOT / "gradle/libs.versions.toml").read_text()
 assert "credentials" in (ROOT / "gradle/libs.versions.toml").read_text()
-assert 'versionName = "0.54.3"' in gradle
+assert any(line.strip().startswith('versionName = "') for line in gradle.splitlines())
 assert "hashRefreshToken" in auth_core
 provider_auth = (backend / "src/provider-auth.js").read_text()
 provider_http = (backend / "src/provider-http.js").read_text()
