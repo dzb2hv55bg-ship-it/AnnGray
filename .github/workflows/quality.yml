@@ -110,7 +110,10 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - uses: ReactiveCircus/android-emulator-runner@v2
+        env:
+          ANDROID_I_WANT_MY_TCG: 'yes'
         with:
           api-level: 35
+          emulator-boot-timeout: 900
           arch: x86_64
           script: bash gradlew connectedDebugAndroidTest -PmomentoAllowOfflinePreview=true -PmomentoRequireLiveAuth=false

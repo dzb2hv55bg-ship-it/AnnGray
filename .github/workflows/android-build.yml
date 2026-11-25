@@ -106,9 +106,11 @@ jobs:
       - name: Run instrumented tests on emulator
         env:
           ORG_GRADLE_PROJECT_momentoApiBaseUrl: ${{ vars.MOMENTO_API_URL }}
+          ANDROID_I_WANT_MY_TCG: 'yes'
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
+          emulator-boot-timeout: 900
           target: google_apis
           arch: x86_64
           script: ./gradlew :app:connectedDebugAndroidTest --stacktrace --no-daemon
